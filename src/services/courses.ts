@@ -19,30 +19,24 @@ export type CourseAssignment = {
   created_at: string;
 };
 
-export type CourseWithAssignments = Course & {
-  course_assignments?: CourseAssignment[];
-};
-
-function cleanText(value: string) {
-  return value.trim();
+function cleanValue(value: string) {
+  return String(value || "").trim();
 }
 
-function cleanCourseCode(value: string) {
-  return value.trim().toUpperCase();
-}
-
-function cleanPayload<T extends Record<string, any>>(payload: T): T {
-  const cleaned: Record<string, any> = {};
-
-  Object.entries(payload).forEach(([key, value]) => {
-    if (typeof value === "string") {
-      cleaned[key] = value.trim();
-    } else {
-      cleaned[key] = value;
-    }
-  });
-
-  return cleaned as T;
+function cleanPayload(payload: {
+  course_id: string;
+  school: string;
+  faculty: string;
+  department: string;
+  level: string;
+}) {
+  return {
+    course_id: cleanValue(payload.course_id),
+    school: cleanValue(payload.school),
+    faculty: cleanValue(payload.faculty),
+    department: cleanValue(payload.department),
+    level: cleanValue(payload.level),
+  };
 }
 
 export async function getCourses() {
@@ -52,24 +46,7 @@ export async function getCourses() {
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-
-  return (data || []) as Course[];
-}
-
-export async function getCoursesWithAssignments() {
-  const { data, error } = await supabase
-    .from("courses")
-    .select(
-      `
-      *,
-      course_assignments (*)
-    `
-    )
-    .order("created_at", { ascending: false });
-
-  if (error) throw error;
-
-  return (data || []) as CourseWithAssignments[];
+  return data as Course[];
 }
 
 export async function createCourse(payload: {
@@ -78,21 +55,18 @@ export async function createCourse(payload: {
   semester: string;
   status: string;
 }) {
-  const cleanedPayload = {
-    code: cleanCourseCode(payload.code),
-    title: cleanText(payload.title),
-    semester: cleanText(payload.semester),
-    status: cleanText(payload.status),
-  };
-
   const { data, error } = await supabase
     .from("courses")
-    .insert(cleanedPayload)
+    .insert({
+      code: cleanValue(payload.code).toUpperCase(),
+      title: cleanValue(payload.title),
+      semester: cleanValue(payload.semester),
+      status: cleanValue(payload.status),
+    })
     .select()
     .single();
 
   if (error) throw error;
-
   return data as Course;
 }
 
@@ -105,22 +79,19 @@ export async function updateCourse(
     status: string;
   }
 ) {
-  const cleanedPayload = {
-    code: cleanCourseCode(payload.code),
-    title: cleanText(payload.title),
-    semester: cleanText(payload.semester),
-    status: cleanText(payload.status),
-  };
-
   const { data, error } = await supabase
     .from("courses")
-    .update(cleanedPayload)
+    .update({
+      code: cleanValue(payload.code).toUpperCase(),
+      title: cleanValue(payload.title),
+      semester: cleanValue(payload.semester),
+      status: cleanValue(payload.status),
+    })
     .eq("id", id)
     .select()
     .single();
 
   if (error) throw error;
-
   return data as Course;
 }
 
@@ -138,8 +109,7 @@ export async function getCourseAssignments(courseId: string) {
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-
-  return (data || []) as CourseAssignment[];
+  return data as CourseAssignment[];
 }
 
 export async function createCourseAssignment(payload: {
@@ -149,38 +119,28 @@ export async function createCourseAssignment(payload: {
   department: string;
   level: string;
 }) {
-  const cleanedPayload = cleanPayload({
-    course_id: payload.course_id,
-    school: payload.school,
-    faculty: payload.faculty,
-    department: payload.department,
-    level: payload.level,
-  });
+  const clean = cleanPayload(payload);
 
-  const { data: existingAssignment, error: checkError } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from("course_assignments")
     .select("*")
-    .eq("course_id", cleanedPayload.course_id)
-    .ilike("school", cleanedPayload.school)
-    .ilike("faculty", cleanedPayload.faculty)
-    .ilike("department", cleanedPayload.department)
-    .ilike("level", cleanedPayload.level)
+    .eq("course_id", clean.course_id)
+    .eq("school", clean.school)
+    .eq("faculty", clean.faculty)
+    .eq("department", clean.department)
+    .eq("level", clean.level)
     .maybeSingle();
 
-  if (checkError) throw checkError;
-
-  if (existingAssignment) {
-    return existingAssignment as CourseAssignment;
-  }
+  if (existingError) throw existingError;
+  if (existing) return existing as CourseAssignment;
 
   const { data, error } = await supabase
     .from("course_assignments")
-    .insert(cleanedPayload)
+    .insert(clean)
     .select()
     .single();
 
   if (error) throw error;
-
   return data as CourseAssignment;
 }
 
@@ -191,41 +151,4 @@ export async function deleteCourseAssignment(id: string) {
     .eq("id", id);
 
   if (error) throw error;
-}
-
-export async function getAssignedCoursesForStudent(payload: {
-  school: string;
-  faculty: string;
-  department: string;
-  level: string;
-}) {
-  const cleanedPayload = cleanPayload({
-    school: payload.school,
-    faculty: payload.faculty,
-    department: payload.department,
-    level: payload.level,
-  });
-
-  const { data, error } = await supabase
-    .from("course_assignments")
-    .select(
-      `
-      *,
-      courses (*)
-    `
-    )
-    .ilike("school", cleanedPayload.school)
-    .ilike("faculty", cleanedPayload.faculty)
-    .ilike("department", cleanedPayload.department)
-    .ilike("level", cleanedPayload.level)
-    .order("created_at", { ascending: false });
-
-  if (error) throw error;
-
-  const courses =
-    data
-      ?.map((assignment: any) => assignment.courses)
-      .filter(Boolean) || [];
-
-  return courses as Course[];
 }
