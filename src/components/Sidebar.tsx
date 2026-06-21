@@ -12,6 +12,7 @@ import {
   Trophy,
   Users,
   X,
+  Star,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import logo from "../assets/ls-logo.png";
