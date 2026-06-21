@@ -33,6 +33,7 @@ const links = [
   { name: "Analytics", path: "/analytics", icon: BarChart3 },
   { name: "Admin Logs", path: "/admin-logs", icon: Activity },
   { name: "Notifications", path: "/notifications", icon: Bell },
+  { name: "Reviews", path: "/reviews", icon: "star" }
   { name: "Settings", path: "/settings", icon: Settings },
 ];
 

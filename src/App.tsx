@@ -15,6 +15,7 @@ import Exams from "./pages/Exams";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
 import AdminLogs from "./pages/AdminLogs";
+import Reviews from "./pages/Reviews";
 import Notifications from "./pages/Notifications";
 
 export default function App() {
@@ -37,6 +38,7 @@ export default function App() {
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/admin-logs" element={<AdminLogs />} />
             <Route path="/notifications" element={<Notifications />} />
+            <Route path="/reviews" element={<Reviews />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
         </Route>
