@@ -5,7 +5,20 @@ import {
   updateReviewStatus,
 } from "../services/reviews";
 
-type FilterStatus = "pending" | "approved" | "rejected" | "all";
+type ReviewStatus = "pending" | "approved" | "rejected";
+type FilterStatus = ReviewStatus | "all";
+
+type AppReview = {
+  id: string;
+  user_id?: string | null;
+  display_name?: string | null;
+  department?: string | null;
+  level?: string | null;
+  rating?: number | null;
+  review?: string | null;
+  status?: ReviewStatus | string | null;
+  created_at?: string | null;
+};
 
 const filters: { label: string; value: FilterStatus }[] = [
   { label: "Pending", value: "pending" },
@@ -14,7 +27,15 @@ const filters: { label: string; value: FilterStatus }[] = [
   { label: "All", value: "all" },
 ];
 
-function formatDate(value: string) {
+function normalizeStatus(status?: string | null): ReviewStatus {
+  if (status === "approved") return "approved";
+  if (status === "rejected") return "rejected";
+  return "pending";
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "Unknown date";
+
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) return "Unknown date";
@@ -26,7 +47,9 @@ function formatDate(value: string) {
   });
 }
 
-function getStatusClass(status: AppReview["status"]) {
+function getStatusClass(statusValue?: string | null) {
+  const status = normalizeStatus(statusValue);
+
   if (status === "approved") {
     return "border-emerald-500/25 bg-emerald-500/10 text-emerald-300";
   }
@@ -38,7 +61,7 @@ function getStatusClass(status: AppReview["status"]) {
   return "border-orange-500/25 bg-orange-500/10 text-orange-300";
 }
 
-function Stars({ rating }: { rating: number }) {
+function Stars({ rating }: { rating?: number | null }) {
   const safeRating = Math.max(1, Math.min(5, Number(rating || 5)));
 
   return (
@@ -65,9 +88,9 @@ export default function Reviews() {
   const stats = useMemo(() => {
     return {
       all: reviews.length,
-      pending: reviews.filter((item) => item.status === "pending").length,
-      approved: reviews.filter((item) => item.status === "approved").length,
-      rejected: reviews.filter((item) => item.status === "rejected").length,
+      pending: reviews.filter((item) => normalizeStatus(item.status) === "pending").length,
+      approved: reviews.filter((item) => normalizeStatus(item.status) === "approved").length,
+      rejected: reviews.filter((item) => normalizeStatus(item.status) === "rejected").length,
     };
   }, [reviews]);
 
@@ -81,23 +104,27 @@ export default function Reviews() {
       setErrorText("");
 
       const data = await getAppReviews(filter);
-      setReviews(data);
-    } catch (error: any) {
-      setErrorText(error?.message || "Could not load reviews.");
+      setReviews((data || []) as AppReview[]);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not load reviews.";
+      setErrorText(message);
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleStatus(id: string, status: AppReview["status"]) {
+  async function handleStatus(id: string, status: ReviewStatus) {
     try {
       setBusyId(id);
       setErrorText("");
 
       await updateReviewStatus(id, status);
       await loadReviews();
-    } catch (error: any) {
-      setErrorText(error?.message || "Could not update review.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not update review.";
+      setErrorText(message);
     } finally {
       setBusyId(null);
     }
@@ -114,8 +141,10 @@ export default function Reviews() {
 
       await deleteAppReview(id);
       await loadReviews();
-    } catch (error: any) {
-      setErrorText(error?.message || "Could not delete review.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not delete review.";
+      setErrorText(message);
     } finally {
       setBusyId(null);
     }
@@ -195,87 +224,91 @@ export default function Reviews() {
           </div>
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
-            {reviews.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-2xl shadow-black/10"
-              >
-                <div className="mb-4 flex items-start justify-between gap-4">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-lg font-black text-white">
-                        {item.display_name || "LASU Scholar Student"}
-                      </h2>
+            {reviews.map((item) => {
+              const status = normalizeStatus(item.status);
 
-                      <span
-                        className={`rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-wide ${getStatusClass(
-                          item.status
-                        )}`}
-                      >
-                        {item.status}
-                      </span>
+              return (
+                <div
+                  key={item.id}
+                  className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-2xl shadow-black/10"
+                >
+                  <div className="mb-4 flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-lg font-black text-white">
+                          {item.display_name || "LASU Scholar Student"}
+                        </h2>
+
+                        <span
+                          className={`rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-wide ${getStatusClass(
+                            status
+                          )}`}
+                        >
+                          {status}
+                        </span>
+                      </div>
+
+                      <p className="mt-1 text-xs font-bold text-slate-500">
+                        {item.department || "Department"} • {item.level || "Level"} •{" "}
+                        {formatDate(item.created_at)}
+                      </p>
                     </div>
 
-                    <p className="mt-1 text-xs font-bold text-slate-500">
-                      {item.department || "Department"} • {item.level || "Level"} •{" "}
-                      {formatDate(item.created_at)}
-                    </p>
+                    <Stars rating={item.rating} />
                   </div>
 
-                  <Stars rating={item.rating} />
-                </div>
-
-                <p className="min-h-[84px] rounded-2xl border border-white/10 bg-[#07101F]/60 p-4 text-sm font-medium leading-6 text-slate-300">
-                  {item.review}
-                </p>
-
-                <div className="mt-5 flex flex-wrap gap-2">
-                  {item.status !== "approved" ? (
-                    <button
-                      disabled={busyId === item.id}
-                      onClick={() => handleStatus(item.id, "approved")}
-                      className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-black text-white transition hover:bg-emerald-400 disabled:opacity-60"
-                    >
-                      Approve
-                    </button>
-                  ) : null}
-
-                  {item.status !== "rejected" ? (
-                    <button
-                      disabled={busyId === item.id}
-                      onClick={() => handleStatus(item.id, "rejected")}
-                      className="rounded-2xl bg-red-500 px-4 py-2 text-sm font-black text-white transition hover:bg-red-400 disabled:opacity-60"
-                    >
-                      Reject
-                    </button>
-                  ) : null}
-
-                  {item.status !== "pending" ? (
-                    <button
-                      disabled={busyId === item.id}
-                      onClick={() => handleStatus(item.id, "pending")}
-                      className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-black text-white transition hover:bg-white/10 disabled:opacity-60"
-                    >
-                      Move to Pending
-                    </button>
-                  ) : null}
-
-                  <button
-                    disabled={busyId === item.id}
-                    onClick={() => handleDelete(item.id)}
-                    className="ml-auto rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-black text-red-200 transition hover:bg-red-500/20 disabled:opacity-60"
-                  >
-                    Delete
-                  </button>
-                </div>
-
-                {busyId === item.id ? (
-                  <p className="mt-3 text-xs font-bold text-orange-300">
-                    Updating review...
+                  <p className="min-h-[84px] rounded-2xl border border-white/10 bg-[#07101F]/60 p-4 text-sm font-medium leading-6 text-slate-300">
+                    {item.review || "No review text."}
                   </p>
-                ) : null}
-              </div>
-            ))}
+
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {status !== "approved" ? (
+                      <button
+                        disabled={busyId === item.id}
+                        onClick={() => handleStatus(item.id, "approved")}
+                        className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-black text-white transition hover:bg-emerald-400 disabled:opacity-60"
+                      >
+                        Approve
+                      </button>
+                    ) : null}
+
+                    {status !== "rejected" ? (
+                      <button
+                        disabled={busyId === item.id}
+                        onClick={() => handleStatus(item.id, "rejected")}
+                        className="rounded-2xl bg-red-500 px-4 py-2 text-sm font-black text-white transition hover:bg-red-400 disabled:opacity-60"
+                      >
+                        Reject
+                      </button>
+                    ) : null}
+
+                    {status !== "pending" ? (
+                      <button
+                        disabled={busyId === item.id}
+                        onClick={() => handleStatus(item.id, "pending")}
+                        className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-black text-white transition hover:bg-white/10 disabled:opacity-60"
+                      >
+                        Move to Pending
+                      </button>
+                    ) : null}
+
+                    <button
+                      disabled={busyId === item.id}
+                      onClick={() => handleDelete(item.id)}
+                      className="ml-auto rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-black text-red-200 transition hover:bg-red-500/20 disabled:opacity-60"
+                    >
+                      Delete
+                    </button>
+                  </div>
+
+                  {busyId === item.id ? (
+                    <p className="mt-3 text-xs font-bold text-orange-300">
+                      Updating review...
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
