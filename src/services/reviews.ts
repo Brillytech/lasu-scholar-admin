@@ -12,7 +12,9 @@ export type AppReview = {
   created_at: string;
 };
 
-export async function getAppReviews(status?: "pending" | "approved" | "rejected" | "all") {
+export async function getAppReviews(
+  status?: "pending" | "approved" | "rejected" | "all"
+): Promise<AppReview[]> {
   let query = supabase
     .from("app_reviews")
     .select("*")
@@ -32,7 +34,7 @@ export async function getAppReviews(status?: "pending" | "approved" | "rejected"
 export async function updateReviewStatus(
   id: string,
   status: "approved" | "rejected" | "pending"
-) {
+): Promise<AppReview> {
   const { data, error } = await supabase
     .from("app_reviews")
     .update({ status })

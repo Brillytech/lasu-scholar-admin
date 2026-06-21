@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import type { AppReview } from "../services/reviews";
 import {
-  AppReview,
   deleteAppReview,
   getAppReviews,
   updateReviewStatus,
