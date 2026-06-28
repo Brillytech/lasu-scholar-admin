@@ -4,22 +4,35 @@ import {
   CheckCircle2,
   Edit3,
   GraduationCap,
+  Layers3,
   Plus,
   Search,
+  Share2,
+  SlidersHorizontal,
   Trash2,
   X,
 } from "lucide-react";
 import { useAdminAuth } from "../context/AuthContext";
 import { createAdminLog } from "../services/adminLogs";
-import type { Course, CourseAssignment } from "../services/courses";
+import type {
+  AcademicPeriod,
+  AppPeriodControl,
+  Course,
+  CourseShare,
+} from "../services/courses";
 import {
   createCourse,
-  createCourseAssignment,
   deleteCourse,
-  deleteCourseAssignment,
-  getCourseAssignments,
+  deleteCourseShare,
+  ensureAcademicPeriods,
+  getAcademicPeriodType,
+  getAppPeriodControl,
+  getCourseShares,
   getCourses,
+  shareCourseWithDepartment,
   updateCourse,
+  updateLiveAppPeriod,
+  updateWorkspacePeriod,
 } from "../services/courses";
 
 const LASU_DATA: Record<string, string[]> = {
@@ -150,69 +163,233 @@ const LASUCOM_DEPARTMENTS = [
   "Radiography and Radiation Science",
 ];
 
-const emptyCourseForm = {
-  code: "",
-  title: "",
-  semester: "First Semester",
-  status: "active",
-};
-
-const emptyAssignmentForm = {
+const emptyContext = {
   school: "LASU",
   faculty: "",
   department: "",
   level: "100L",
 };
 
+const emptyCourseForm = {
+  code: "",
+  title: "",
+  status: "active",
+  school: "LASU",
+  faculty: "",
+  department: "",
+  level: "100L",
+  academic_period_id: "",
+};
+
+const emptyShareForm = {
+  school: "LASU",
+  faculty: "",
+  department: "",
+  level: "100L",
+  academic_period_id: "",
+};
+
+function clean(value?: string | null) {
+  return String(value || "").trim();
+}
+
+function getContextFaculty(context: typeof emptyContext) {
+  return context.school === "LASUCOM" ? "College of Medicine" : clean(context.faculty);
+}
+
+function getDepartmentOptions(school: string, faculty: string) {
+  if (school === "LASUCOM") return LASUCOM_DEPARTMENTS;
+  if (!faculty) return [];
+  return LASU_DATA[faculty] || [];
+}
+
+function getLevelOptions(school: string, department?: string) {
+  if (school !== "LASUCOM") return ["100L", "200L", "300L", "400L", "500L"];
+
+  const periodType = getAcademicPeriodType(department);
+
+  if (periodType === "block") return ["200L", "300L"];
+
+  return ["200L", "300L", "400L", "500L"];
+}
+
 export default function Courses() {
   const { profile } = useAdminAuth();
   const isSuperAdmin = profile?.role === "super_admin";
 
   const [courses, setCourses] = useState<Course[]>([]);
-  const [assignments, setAssignments] = useState<CourseAssignment[]>([]);
+  const [periods, setPeriods] = useState<AcademicPeriod[]>([]);
+  const [periodControl, setPeriodControl] = useState<AppPeriodControl | null>(null);
+
+  const [shares, setShares] = useState<CourseShare[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+
+  const [context, setContext] = useState(emptyContext);
+  const [courseForm, setCourseForm] = useState(emptyCourseForm);
+  const [shareForm, setShareForm] = useState(emptyShareForm);
+  const [sharePeriods, setSharePeriods] = useState<AcademicPeriod[]>([]);
 
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadingPeriods, setLoadingPeriods] = useState(false);
   const [savingCourse, setSavingCourse] = useState(false);
-  const [savingAssignment, setSavingAssignment] = useState(false);
+  const [savingShare, setSavingShare] = useState(false);
+  const [savingControl, setSavingControl] = useState(false);
 
   const [courseModalOpen, setCourseModalOpen] = useState(false);
-  const [assignmentPanelOpen, setAssignmentPanelOpen] = useState(false);
+  const [sharePanelOpen, setSharePanelOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
-
-  const [courseForm, setCourseForm] = useState(emptyCourseForm);
-  const [assignmentForm, setAssignmentForm] = useState(emptyAssignmentForm);
 
   const [visibleCount, setVisibleCount] = useState(10);
   const [expandedCourses, setExpandedCourses] = useState<string[]>([]);
 
   const facultyOptions = Object.keys(LASU_DATA);
 
-  const departmentOptions =
-    assignmentForm.school === "LASUCOM"
-      ? LASUCOM_DEPARTMENTS
-      : assignmentForm.faculty
-      ? LASU_DATA[assignmentForm.faculty] || []
-      : [];
+  const departmentOptions = getDepartmentOptions(context.school, context.faculty);
+  const levelOptions = getLevelOptions(context.school, context.department);
 
-  const levelOptions =
-    assignmentForm.school === "LASUCOM" ? ["200L"] : ["100L", "200L"];
+  const shareDepartmentOptions = getDepartmentOptions(shareForm.school, shareForm.faculty);
+  const shareLevelOptions = getLevelOptions(shareForm.school, shareForm.department);
+
+  const workspacePeriodId = periodControl?.workspace_period_id || periods[0]?.id || "";
+  const livePeriodId = periodControl?.live_period_id || periods[0]?.id || "";
+  const workspacePeriod = periods.find((item) => item.id === workspacePeriodId) || null;
+  const livePeriod = periods.find((item) => item.id === livePeriodId) || null;
+
+  const periodType = getAcademicPeriodType(context.department);
 
   useEffect(() => {
-    loadCourses();
-  }, []);
+    loadAcademicWorkspace();
+  }, [context.school, context.faculty, context.department, context.level]);
+
+  useEffect(() => {
+    if (workspacePeriodId) {
+      loadCourses();
+    }
+  }, [workspacePeriodId]);
+
+  useEffect(() => {
+    loadSharePeriods();
+  }, [shareForm.school, shareForm.faculty, shareForm.department, shareForm.level]);
+
+  async function loadAcademicWorkspace() {
+    const faculty = getContextFaculty(context);
+
+    if (!context.school || !context.department || !context.level || (context.school === "LASU" && !faculty)) {
+      setPeriods([]);
+      setPeriodControl(null);
+      setCourses([]);
+      return;
+    }
+
+    try {
+      setLoadingPeriods(true);
+
+      const nextPeriods = await ensureAcademicPeriods({
+        school: context.school,
+        faculty,
+        department: context.department,
+        level: context.level,
+      });
+
+      setPeriods(nextPeriods);
+
+      const control = await getAppPeriodControl({
+        school: context.school,
+        faculty,
+        department: context.department,
+        level: context.level,
+      });
+
+      if (!control && nextPeriods[0]) {
+        const created = await updateWorkspacePeriod({
+          school: context.school,
+          faculty,
+          department: context.department,
+          level: context.level,
+          workspace_period_id: nextPeriods[0].id,
+        });
+
+        const withLive = await updateLiveAppPeriod({
+          school: context.school,
+          faculty,
+          department: context.department,
+          level: context.level,
+          live_period_id: nextPeriods[0].id,
+        });
+
+        setPeriodControl({
+          ...created,
+          live_period_id: withLive.live_period_id,
+        });
+      } else {
+        setPeriodControl(control);
+      }
+    } catch (error: any) {
+      alert(error.message || "Could not load academic periods.");
+    } finally {
+      setLoadingPeriods(false);
+    }
+  }
 
   async function loadCourses() {
+    const faculty = getContextFaculty(context);
+
+    if (!context.school || !context.department || !context.level || !workspacePeriodId) {
+      setCourses([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const data = await getCourses();
+      const data = await getCourses({
+        school: context.school,
+        faculty,
+        department: context.department,
+        level: context.level,
+        academic_period_id: workspacePeriodId,
+      });
+
       setCourses(data);
     } catch (error: any) {
       alert(error.message || "Could not load courses.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadSharePeriods() {
+    const faculty =
+      shareForm.school === "LASUCOM" ? "College of Medicine" : clean(shareForm.faculty);
+
+    if (!shareForm.school || !shareForm.department || !shareForm.level || (shareForm.school === "LASU" && !faculty)) {
+      setSharePeriods([]);
+      return;
+    }
+
+    try {
+      const data = await ensureAcademicPeriods({
+        school: shareForm.school,
+        faculty,
+        department: shareForm.department,
+        level: shareForm.level,
+      });
+
+      setSharePeriods(data);
+
+      const matchedByName = data.find(
+        (item) => item.name === selectedCourse?.academic_periods?.name
+      );
+
+      setShareForm((prev) => ({
+        ...prev,
+        academic_period_id:
+          prev.academic_period_id || matchedByName?.id || data[0]?.id || "",
+      }));
+    } catch (error: any) {
+      alert(error.message || "Could not load sharing periods.");
     }
   }
 
@@ -222,38 +399,9 @@ export default function Courses() {
     );
   }
 
-  async function openAssignments(course: Course) {
-    setSelectedCourse(course);
-    setAssignmentPanelOpen(true);
-
-    try {
-      const data = await getCourseAssignments(course.id);
-      setAssignments(data);
-    } catch (error: any) {
-      alert(error.message || "Could not load course assignments.");
-    }
-  }
-
-  function openCreateCourse() {
-    setEditingCourse(null);
-    setCourseForm(emptyCourseForm);
-    setCourseModalOpen(true);
-  }
-
-  function openEditCourse(course: Course) {
-    setEditingCourse(course);
-    setCourseForm({
-      code: course.code || "",
-      title: course.title || "",
-      semester: course.semester || "First Semester",
-      status: course.status || "active",
-    });
-    setCourseModalOpen(true);
-  }
-
-  function handleSchoolChange(value: string) {
+  function handleContextSchoolChange(value: string) {
     if (value === "LASUCOM") {
-      setAssignmentForm({
+      setContext({
         school: "LASUCOM",
         faculty: "College of Medicine",
         department: "",
@@ -262,7 +410,7 @@ export default function Courses() {
       return;
     }
 
-    setAssignmentForm({
+    setContext({
       school: "LASU",
       faculty: "",
       department: "",
@@ -270,12 +418,179 @@ export default function Courses() {
     });
   }
 
-  function handleFacultyChange(value: string) {
-    setAssignmentForm((prev) => ({
+  function handleContextFacultyChange(value: string) {
+    setContext((prev) => ({
       ...prev,
       faculty: value,
       department: "",
     }));
+  }
+
+  function handleContextDepartmentChange(value: string) {
+    const levels = getLevelOptions(context.school, value);
+
+    setContext((prev) => ({
+      ...prev,
+      department: value,
+      level: levels[0] || prev.level,
+    }));
+  }
+
+  function handleShareSchoolChange(value: string) {
+    if (value === "LASUCOM") {
+      setShareForm({
+        school: "LASUCOM",
+        faculty: "College of Medicine",
+        department: "",
+        level: "200L",
+        academic_period_id: "",
+      });
+      return;
+    }
+
+    setShareForm({
+      school: "LASU",
+      faculty: "",
+      department: "",
+      level: "100L",
+      academic_period_id: "",
+    });
+  }
+
+  function handleShareFacultyChange(value: string) {
+    setShareForm((prev) => ({
+      ...prev,
+      faculty: value,
+      department: "",
+      academic_period_id: "",
+    }));
+  }
+
+  function handleShareDepartmentChange(value: string) {
+    const levels = getLevelOptions(shareForm.school, value);
+
+    setShareForm((prev) => ({
+      ...prev,
+      department: value,
+      level: levels[0] || prev.level,
+      academic_period_id: "",
+    }));
+  }
+
+  async function handleWorkspaceSwitch(periodId: string) {
+    if (!periodId) return;
+
+    const faculty = getContextFaculty(context);
+
+    try {
+      setSavingControl(true);
+
+      const updated = await updateWorkspacePeriod({
+        school: context.school,
+        faculty,
+        department: context.department,
+        level: context.level,
+        workspace_period_id: periodId,
+      });
+
+      setPeriodControl((prev) => ({
+        ...(prev || updated),
+        ...updated,
+        live_period_id: prev?.live_period_id || updated.live_period_id,
+      }));
+
+      await createAdminLog({
+        admin_id: profile?.id,
+        action: "UPDATE_WORKSPACE_PERIOD",
+        target_table: "app_period_controls",
+        target_id: updated.id,
+        description: `Workspace period changed to ${
+          periods.find((item) => item.id === periodId)?.name || "selected period"
+        } for ${context.department} ${context.level}`,
+      });
+    } catch (error: any) {
+      alert(error.message || "Could not switch workspace period.");
+    } finally {
+      setSavingControl(false);
+    }
+  }
+
+  async function handleLiveSwitch(periodId: string) {
+    if (!periodId) return;
+
+    const selectedPeriod = periods.find((item) => item.id === periodId);
+    const confirmed = confirm(
+      `Switch live app access to ${selectedPeriod?.name || "this period"} for ${context.department} ${context.level}? Students will only see content under this period.`
+    );
+
+    if (!confirmed) return;
+
+    const faculty = getContextFaculty(context);
+
+    try {
+      setSavingControl(true);
+
+      const updated = await updateLiveAppPeriod({
+        school: context.school,
+        faculty,
+        department: context.department,
+        level: context.level,
+        live_period_id: periodId,
+      });
+
+      setPeriodControl((prev) => ({
+        ...(prev || updated),
+        ...updated,
+        workspace_period_id: prev?.workspace_period_id || updated.workspace_period_id,
+      }));
+
+      await createAdminLog({
+        admin_id: profile?.id,
+        action: "UPDATE_LIVE_APP_PERIOD",
+        target_table: "app_period_controls",
+        target_id: updated.id,
+        description: `Live app period changed to ${
+          selectedPeriod?.name || "selected period"
+        } for ${context.department} ${context.level}`,
+      });
+    } catch (error: any) {
+      alert(error.message || "Could not switch live app period.");
+    } finally {
+      setSavingControl(false);
+    }
+  }
+
+  function openCreateCourse() {
+    if (!context.department || !workspacePeriodId) {
+      alert("Select a department, level and workspace period first.");
+      return;
+    }
+
+    setEditingCourse(null);
+    setCourseForm({
+      ...emptyCourseForm,
+      school: context.school,
+      faculty: getContextFaculty(context),
+      department: context.department,
+      level: context.level,
+      academic_period_id: workspacePeriodId,
+    });
+    setCourseModalOpen(true);
+  }
+
+  function openEditCourse(course: Course) {
+    setEditingCourse(course);
+    setCourseForm({
+      code: course.code || "",
+      title: course.title || "",
+      status: course.status || "active",
+      school: course.school || context.school,
+      faculty: course.faculty || getContextFaculty(context),
+      department: course.department || context.department,
+      level: course.level || context.level,
+      academic_period_id: course.academic_period_id || workspacePeriodId,
+    });
+    setCourseModalOpen(true);
   }
 
   async function handleSaveCourse() {
@@ -284,15 +599,29 @@ export default function Courses() {
       return;
     }
 
+    if (!courseForm.school || !courseForm.department || !courseForm.level || !courseForm.academic_period_id) {
+      alert("Please select school, department, level and academic period.");
+      return;
+    }
+
     try {
       setSavingCourse(true);
+
+      const selectedPeriod = periods.find(
+        (item) => item.id === courseForm.academic_period_id
+      );
 
       if (editingCourse) {
         const updated = await updateCourse(editingCourse.id, {
           code: courseForm.code.trim().toUpperCase(),
           title: courseForm.title.trim(),
-          semester: courseForm.semester,
+          semester: selectedPeriod?.name || "",
           status: courseForm.status,
+          school: courseForm.school,
+          faculty: courseForm.faculty,
+          department: courseForm.department,
+          level: courseForm.level,
+          academic_period_id: courseForm.academic_period_id,
         });
 
         await createAdminLog({
@@ -306,8 +635,13 @@ export default function Courses() {
         const created = await createCourse({
           code: courseForm.code.trim().toUpperCase(),
           title: courseForm.title.trim(),
-          semester: courseForm.semester,
+          semester: selectedPeriod?.name || "",
           status: courseForm.status,
+          school: courseForm.school,
+          faculty: courseForm.faculty,
+          department: courseForm.department,
+          level: courseForm.level,
+          academic_period_id: courseForm.academic_period_id,
         });
 
         await createAdminLog({
@@ -315,7 +649,7 @@ export default function Courses() {
           action: "CREATE_COURSE",
           target_table: "courses",
           target_id: created.id,
-          description: `Created course ${created.code} - ${created.title}`,
+          description: `Created ${created.code} under ${courseForm.department} ${courseForm.level} - ${selectedPeriod?.name || "period"}`,
         });
       }
 
@@ -335,7 +669,7 @@ export default function Courses() {
     }
 
     const confirmed = confirm(
-      `Delete ${course.code}? This will also remove its assignments.`
+      `Delete ${course.code}? This will also remove its topics, materials and shared access.`
     );
 
     if (!confirmed) return;
@@ -353,8 +687,8 @@ export default function Courses() {
 
       if (selectedCourse?.id === course.id) {
         setSelectedCourse(null);
-        setAssignmentPanelOpen(false);
-        setAssignments([]);
+        setSharePanelOpen(false);
+        setShares([]);
       }
 
       await loadCourses();
@@ -363,83 +697,102 @@ export default function Courses() {
     }
   }
 
-  async function handleCreateAssignment() {
+  async function openShares(course: Course) {
+    setSelectedCourse(course);
+    setSharePanelOpen(true);
+
+    setShareForm({
+      ...emptyShareForm,
+      academic_period_id: course.academic_period_id || "",
+    });
+
+    try {
+      const data = await getCourseShares(course.id);
+      setShares(data);
+    } catch (error: any) {
+      alert(error.message || "Could not load shared departments.");
+    }
+  }
+
+  async function handleCreateShare() {
     if (!selectedCourse) return;
 
     const faculty =
-      assignmentForm.school === "LASUCOM"
+      shareForm.school === "LASUCOM"
         ? "College of Medicine"
-        : assignmentForm.faculty.trim();
+        : shareForm.faculty.trim();
 
     if (
-      !assignmentForm.school.trim() ||
+      !shareForm.school.trim() ||
       !faculty ||
-      !assignmentForm.department.trim() ||
-      !assignmentForm.level.trim()
+      !shareForm.department.trim() ||
+      !shareForm.level.trim() ||
+      !shareForm.academic_period_id
     ) {
-      alert("Please select school, faculty/department and level.");
+      alert("Please select school, faculty/department, level and period.");
       return;
     }
 
     try {
-      setSavingAssignment(true);
+      setSavingShare(true);
 
-      const createdAssignment = await createCourseAssignment({
+      const createdShare = await shareCourseWithDepartment({
         course_id: selectedCourse.id,
-        school: assignmentForm.school.trim(),
+        school: shareForm.school.trim(),
         faculty,
-        department: assignmentForm.department.trim(),
-        level: assignmentForm.level.trim(),
+        department: shareForm.department.trim(),
+        level: shareForm.level.trim(),
+        academic_period_id: shareForm.academic_period_id,
       });
 
       await createAdminLog({
         admin_id: profile?.id,
-        action: "CREATE_COURSE_ASSIGNMENT",
-        target_table: "course_assignments",
-        target_id: createdAssignment.id,
-        description: `Assigned ${selectedCourse.code} to ${createdAssignment.department} ${createdAssignment.level}`,
+        action: "SHARE_COURSE_WITH_DEPARTMENT",
+        target_table: "course_shares",
+        target_id: createdShare.id,
+        description: `Shared ${selectedCourse.code} with ${createdShare.department} ${createdShare.level}`,
       });
 
-      setAssignmentForm(emptyAssignmentForm);
+      setShareForm(emptyShareForm);
 
-      const data = await getCourseAssignments(selectedCourse.id);
-      setAssignments(data);
+      const data = await getCourseShares(selectedCourse.id);
+      setShares(data);
     } catch (error: any) {
-      alert(error.message || "Could not assign course.");
+      alert(error.message || "Could not share course.");
     } finally {
-      setSavingAssignment(false);
+      setSavingShare(false);
     }
   }
 
-  async function handleDeleteAssignment(assignment: CourseAssignment) {
+  async function handleDeleteShare(item: CourseShare) {
     if (!isSuperAdmin) {
-      alert("Only super admins can remove course assignments.");
+      alert("Only super admins can remove shared department access.");
       return;
     }
 
     const confirmed = confirm(
-      `Remove ${assignment.department} ${assignment.level} assignment?`
+      `Remove shared access for ${item.department} ${item.level}?`
     );
 
     if (!confirmed) return;
 
     try {
-      await deleteCourseAssignment(assignment.id);
+      await deleteCourseShare(item.id);
 
       await createAdminLog({
         admin_id: profile?.id,
-        action: "DELETE_COURSE_ASSIGNMENT",
-        target_table: "course_assignments",
-        target_id: assignment.id,
-        description: `Removed ${selectedCourse?.code || "course"} assignment from ${assignment.department} ${assignment.level}`,
+        action: "DELETE_COURSE_SHARE",
+        target_table: "course_shares",
+        target_id: item.id,
+        description: `Removed shared access for ${selectedCourse?.code || "course"} from ${item.department} ${item.level}`,
       });
 
       if (selectedCourse) {
-        const data = await getCourseAssignments(selectedCourse.id);
-        setAssignments(data);
+        const data = await getCourseShares(selectedCourse.id);
+        setShares(data);
       }
     } catch (error: any) {
-      alert(error.message || "Could not remove assignment.");
+      alert(error.message || "Could not remove shared access.");
     }
   }
 
@@ -453,7 +806,8 @@ export default function Courses() {
         course.code?.toLowerCase().includes(q) ||
         course.title?.toLowerCase().includes(q) ||
         course.semester?.toLowerCase().includes(q) ||
-        course.status?.toLowerCase().includes(q)
+        course.status?.toLowerCase().includes(q) ||
+        course.department?.toLowerCase().includes(q)
       );
     });
   }, [courses, search]);
@@ -472,7 +826,7 @@ export default function Courses() {
             Courses
           </h1>
           <p className="mt-2 max-w-2xl text-sm font-semibold text-slate-500 dark:text-slate-300 sm:text-base">
-            Create courses once, then assign them to schools, departments and levels.
+            Create courses directly under a department and period, then share access with another department when needed.
           </p>
         </div>
 
@@ -485,22 +839,130 @@ export default function Courses() {
         </button>
       </div>
 
+      <div className="mb-6 rounded-[32px] border border-orange/10 bg-white/85 p-5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/10">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full bg-orange/10 px-3 py-1 text-xs font-black uppercase tracking-[0.14em] text-orange">
+              <SlidersHorizontal size={14} />
+              Academic Control Center
+            </div>
+            <h2 className="mt-3 text-2xl font-black text-navy dark:text-white">
+              Department Workspace
+            </h2>
+            <p className="mt-2 text-sm font-semibold text-slate-500 dark:text-slate-300">
+              Choose the department, level and the period you want to prepare content for.
+            </p>
+          </div>
+
+          <div className="rounded-3xl bg-soft p-4 dark:bg-slate-950/40">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">
+              Structure
+            </p>
+            <p className="mt-2 text-lg font-black text-navy dark:text-white">
+              {periodType === "block" ? "Block System" : "Semester System"}
+            </p>
+            <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-300">
+              {periodType === "block"
+                ? "Used for Medicine and Dentistry"
+                : "Used for this department"}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <Select
+            label="School"
+            value={context.school}
+            onChange={handleContextSchoolChange}
+            options={["LASU", "LASUCOM"]}
+          />
+
+          {context.school === "LASU" && (
+            <Select
+              label="Faculty"
+              value={context.faculty}
+              onChange={handleContextFacultyChange}
+              options={["", ...facultyOptions]}
+            />
+          )}
+
+          <Select
+            label="Department"
+            value={context.department}
+            onChange={handleContextDepartmentChange}
+            options={["", ...departmentOptions]}
+          />
+
+          <Select
+            label="Level"
+            value={context.level}
+            onChange={(value: string) =>
+              setContext((prev) => ({ ...prev, level: value }))
+            }
+            options={levelOptions}
+          />
+        </div>
+
+        <div className="mt-5">
+          <PeriodSwitcher
+            title="Workspace Period"
+            description="Use this for uploading and preparing content. This does not change what students see."
+            periods={periods}
+            selectedId={workspacePeriodId}
+            liveId={livePeriodId}
+            loading={loadingPeriods || savingControl}
+            mode="workspace"
+            onChange={handleWorkspaceSwitch}
+          />
+        </div>
+      </div>
+
+      <div className="mb-6 rounded-[32px] border border-green-500/10 bg-green-50/60 p-5 shadow-sm backdrop-blur-xl dark:border-green-400/10 dark:bg-green-400/5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full bg-green-500/10 px-3 py-1 text-xs font-black uppercase tracking-[0.14em] text-green-700 dark:text-green-300">
+              <CheckCircle2 size={14} />
+              Live App Control
+            </div>
+            <h2 className="mt-3 text-2xl font-black text-navy dark:text-white">
+              Student Access Period
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm font-semibold text-slate-500 dark:text-slate-300">
+              This is separate from admin workspace. Switching this controls what students can currently access in the app.
+            </p>
+          </div>
+
+          <div className="min-w-0 flex-1 lg:max-w-xl">
+            <PeriodSwitcher
+              title="Live App Period"
+              description="Only switch this when the school is ready to open that period to students."
+              periods={periods}
+              selectedId={livePeriodId}
+              liveId={livePeriodId}
+              loading={loadingPeriods || savingControl}
+              mode="live"
+              onChange={handleLiveSwitch}
+            />
+          </div>
+        </div>
+      </div>
+
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         <SummaryCard
-          label="Total Courses"
+          label="Workspace Courses"
           value={courses.length}
           icon={BookOpen}
           color="bg-orange/10 text-orange"
         />
         <SummaryCard
-          label="Selected Assignments"
-          value={assignments.length}
-          icon={GraduationCap}
+          label="Current Period"
+          value={workspacePeriod?.name || "--"}
+          icon={Layers3}
           color="bg-blue-500/10 text-blue-500"
         />
         <SummaryCard
-          label="Active Courses"
-          value={courses.filter((c) => c.status === "active").length}
+          label="Live App"
+          value={livePeriod?.name || "--"}
           icon={CheckCircle2}
           color="bg-green-500/10 text-green-500"
         />
@@ -514,7 +976,7 @@ export default function Courses() {
             setSearch(e.target.value);
             setVisibleCount(10);
           }}
-          placeholder="Search course code, title, semester..."
+          placeholder="Search course code, title or period..."
           className="w-full bg-transparent text-sm font-semibold text-navy outline-none placeholder:text-slate-400 dark:text-white"
         />
       </div>
@@ -536,10 +998,10 @@ export default function Courses() {
                 <BookOpen size={28} />
               </div>
               <h3 className="mt-5 text-xl font-black text-navy dark:text-white">
-                No courses yet
+                No courses in this workspace yet
               </h3>
               <p className="mt-2 text-sm font-semibold text-slate-500 dark:text-slate-300">
-                Create your first course to begin building LASU Scholar content.
+                Create a course under {context.department || "this department"} and {workspacePeriod?.name || "the selected period"}.
               </p>
             </div>
           ) : (
@@ -547,6 +1009,8 @@ export default function Courses() {
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {visibleCourses.map((course) => {
                   const isExpanded = expandedCourses.includes(course.id);
+                  const periodName =
+                    course.academic_periods?.name || course.semester || "Period";
 
                   return (
                     <div
@@ -556,7 +1020,7 @@ export default function Courses() {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-xs font-black uppercase tracking-[0.18em] text-orange">
-                            {course.semester || "Semester"}
+                            {periodName}
                           </p>
                           <h3 className="mt-2 text-2xl font-black text-navy dark:text-white">
                             {course.code}
@@ -566,15 +1030,29 @@ export default function Courses() {
                           </p>
                         </div>
 
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-black ${
-                            course.status === "active"
-                              ? "bg-green-500/10 text-green-600 dark:text-green-300"
-                              : "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300"
-                          }`}
-                        >
-                          {course.status || "active"}
-                        </span>
+                        <div className="flex flex-col items-end gap-2">
+                          {course.is_shared && (
+                            <span className="rounded-full bg-blue-500/10 px-3 py-1 text-xs font-black text-blue-600 dark:text-blue-300">
+                              Shared
+                            </span>
+                          )}
+
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-black ${
+                              course.status === "active"
+                                ? "bg-green-500/10 text-green-600 dark:text-green-300"
+                                : "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300"
+                            }`}
+                          >
+                            {course.status || "active"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <InfoPill text={course.department || context.department} />
+                        <InfoPill text={course.level || context.level} />
+                        <InfoPill text={course.school || context.school} />
                       </div>
 
                       <button
@@ -593,7 +1071,12 @@ export default function Courses() {
                           <div className="mt-3 grid grid-cols-1 gap-2 text-sm font-bold text-slate-600 dark:text-slate-200">
                             <p>Code: {course.code}</p>
                             <p>Title: {course.title}</p>
-                            <p>Semester: {course.semester || "Not set"}</p>
+                            <p>Period: {periodName}</p>
+                            <p>Department: {course.department || "Not set"}</p>
+                            {course.is_shared && (
+                              <p>Original Department: {course.source_department || "Not set"}</p>
+                            )}
+                            <p>Level: {course.level || "Not set"}</p>
                             <p>Status: {course.status || "active"}</p>
                           </div>
                         </div>
@@ -601,21 +1084,24 @@ export default function Courses() {
 
                       <div className="mt-5 flex flex-wrap gap-2">
                         <button
-                          onClick={() => openAssignments(course)}
-                          className="rounded-2xl bg-navy px-4 py-2 text-xs font-black text-white transition hover:scale-[1.03] dark:bg-white/10"
+                          onClick={() => openShares(course)}
+                          className="inline-flex items-center gap-2 rounded-2xl bg-navy px-4 py-2 text-xs font-black text-white transition hover:scale-[1.03] dark:bg-white/10"
                         >
-                          Assign
+                          <Share2 size={14} />
+                          {course.is_shared ? "View Access" : "Share"}
                         </button>
 
-                        <button
-                          onClick={() => openEditCourse(course)}
-                          className="inline-flex items-center gap-2 rounded-2xl bg-soft px-4 py-2 text-xs font-black text-navy transition hover:bg-orange hover:text-white dark:bg-slate-950/50 dark:text-white dark:hover:bg-orange"
-                        >
-                          <Edit3 size={14} />
-                          Edit
-                        </button>
+                        {!course.is_shared && (
+                          <button
+                            onClick={() => openEditCourse(course)}
+                            className="inline-flex items-center gap-2 rounded-2xl bg-soft px-4 py-2 text-xs font-black text-navy transition hover:bg-orange hover:text-white dark:bg-slate-950/50 dark:text-white dark:hover:bg-orange"
+                          >
+                            <Edit3 size={14} />
+                            Edit
+                          </button>
+                        )}
 
-                        {isSuperAdmin && (
+                        {isSuperAdmin && !course.is_shared && (
                           <button
                             onClick={() => handleDeleteCourse(course)}
                             className="inline-flex items-center gap-2 rounded-2xl bg-red-50 px-4 py-2 text-xs font-black text-red-600 transition hover:bg-red-600 hover:text-white dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-600"
@@ -653,143 +1139,30 @@ export default function Courses() {
           )}
         </div>
 
-        <div
-          className={`rounded-[28px] border border-orange/10 bg-white/85 p-5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/10 ${
-            assignmentPanelOpen ? "block" : "hidden xl:block"
-          }`}
-        >
-          {selectedCourse ? (
-            <>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.2em] text-orange">
-                    Assign Course
-                  </p>
-                  <h3 className="mt-2 text-2xl font-black text-navy dark:text-white">
-                    {selectedCourse.code}
-                  </h3>
-                  <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-300">
-                    {selectedCourse.title}
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => setAssignmentPanelOpen(false)}
-                  className="grid h-10 w-10 place-items-center rounded-2xl bg-soft text-navy transition hover:bg-orange hover:text-white dark:bg-white/10 dark:text-white xl:hidden"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="mt-6 space-y-3">
-                <Select
-                  label="School"
-                  value={assignmentForm.school}
-                  onChange={handleSchoolChange}
-                  options={["LASU", "LASUCOM"]}
-                />
-
-                {assignmentForm.school === "LASU" && (
-                  <Select
-                    label="Faculty"
-                    value={assignmentForm.faculty}
-                    onChange={handleFacultyChange}
-                    options={["", ...facultyOptions]}
-                  />
-                )}
-
-                <Select
-                  label="Department"
-                  value={assignmentForm.department}
-                  onChange={(value: string) =>
-                    setAssignmentForm((prev) => ({
-                      ...prev,
-                      department: value,
-                    }))
-                  }
-                  options={["", ...departmentOptions]}
-                />
-
-                <Select
-                  label="Level"
-                  value={assignmentForm.level}
-                  onChange={(value: string) =>
-                    setAssignmentForm((prev) => ({ ...prev, level: value }))
-                  }
-                  options={levelOptions}
-                />
-
-                <button
-                  onClick={handleCreateAssignment}
-                  disabled={savingAssignment}
-                  className="w-full rounded-2xl bg-gradient-to-r from-orange to-amber-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.01] disabled:opacity-60"
-                >
-                  {savingAssignment ? "Assigning..." : "Assign Course"}
-                </button>
-              </div>
-
-              <div className="mt-7">
-                <h4 className="text-sm font-black text-navy dark:text-white">
-                  Current Assignments
-                </h4>
-
-                <div className="mt-3 space-y-3">
-                  {assignments.length === 0 ? (
-                    <div className="rounded-3xl bg-soft p-5 text-center dark:bg-slate-950/50">
-                      <p className="text-sm font-black text-navy dark:text-white">
-                        No assignments yet
-                      </p>
-                      <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-300">
-                        Assign this course to a department and level.
-                      </p>
-                    </div>
-                  ) : (
-                    assignments.map((item) => (
-                      <div
-                        key={item.id}
-                        className="rounded-3xl border border-orange/10 bg-soft p-4 dark:border-white/10 dark:bg-slate-950/50"
-                      >
-                        <p className="font-black text-navy dark:text-white">
-                          {item.department} • {item.level}
-                        </p>
-                        <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-300">
-                          {item.school}
-                          {item.faculty ? ` / ${item.faculty}` : ""}
-                        </p>
-
-                        {isSuperAdmin && (
-                          <button
-                            onClick={() => handleDeleteAssignment(item)}
-                            className="mt-3 text-xs font-black text-red-600 transition hover:text-red-700 dark:text-red-300"
-                          >
-                            Remove Assignment
-                          </button>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="py-10 text-center">
-              <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-orange/10 text-orange">
-                <GraduationCap size={28} />
-              </div>
-              <h3 className="mt-5 text-xl font-black text-navy dark:text-white">
-                Select a course
-              </h3>
-              <p className="mt-2 text-sm font-semibold text-slate-500 dark:text-slate-300">
-                Choose a course to assign it to departments and levels.
-              </p>
-            </div>
-          )}
-        </div>
+        <SharePanel
+          isOpen={sharePanelOpen}
+          selectedCourse={selectedCourse}
+          shares={shares}
+          shareForm={shareForm}
+          savingShare={savingShare}
+          isSuperAdmin={isSuperAdmin}
+          departmentOptions={shareDepartmentOptions}
+          levelOptions={shareLevelOptions}
+          facultyOptions={facultyOptions}
+          sharePeriods={sharePeriods}
+          onClose={() => setSharePanelOpen(false)}
+          onSchoolChange={handleShareSchoolChange}
+          onFacultyChange={handleShareFacultyChange}
+          onDepartmentChange={handleShareDepartmentChange}
+          onFormChange={setShareForm}
+          onCreateShare={handleCreateShare}
+          onDeleteShare={handleDeleteShare}
+        />
       </div>
 
       {courseModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-navy/60 px-4 py-8 backdrop-blur-sm">
-          <div className="mx-auto w-full max-w-lg rounded-[30px] border border-orange/10 bg-white/95 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/95">
+          <div className="mx-auto w-full max-w-2xl rounded-[30px] border border-orange/10 bg-white/95 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/95">
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-orange">
@@ -798,6 +1171,9 @@ export default function Courses() {
                 <h3 className="mt-2 text-2xl font-black text-navy dark:text-white">
                   {editingCourse ? "Update Course" : "Create Course"}
                 </h3>
+                <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-300">
+                  Courses are created directly under the selected department and period.
+                </p>
               </div>
 
               <button
@@ -808,7 +1184,15 @@ export default function Courses() {
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <ReadOnlyBox label="School" value={courseForm.school} />
+              <ReadOnlyBox label="Department" value={courseForm.department} />
+              <ReadOnlyBox label="Level" value={courseForm.level} />
+              <ReadOnlyBox
+                label={periodType === "block" ? "Block" : "Semester"}
+                value={periods.find((item) => item.id === courseForm.academic_period_id)?.name || "Not selected"}
+              />
+
               <Input
                 label="Course Code"
                 value={courseForm.code}
@@ -826,15 +1210,6 @@ export default function Courses() {
               />
 
               <Select
-                label="Semester"
-                value={courseForm.semester}
-                onChange={(value: string) =>
-                  setCourseForm((prev) => ({ ...prev, semester: value }))
-                }
-                options={["First Semester", "Second Semester", "Full Year"]}
-              />
-
-              <Select
                 label="Status"
                 value={courseForm.status}
                 onChange={(value: string) =>
@@ -842,20 +1217,250 @@ export default function Courses() {
                 }
                 options={["active", "inactive"]}
               />
+            </div>
 
-              <button
-                onClick={handleSaveCourse}
-                disabled={savingCourse}
-                className="w-full rounded-2xl bg-gradient-to-r from-orange to-amber-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.01] disabled:opacity-60"
-              >
-                {savingCourse
-                  ? "Saving..."
-                  : editingCourse
-                  ? "Save Changes"
-                  : "Create Course"}
-              </button>
+            <button
+              onClick={handleSaveCourse}
+              disabled={savingCourse}
+              className="mt-6 w-full rounded-2xl bg-gradient-to-r from-orange to-amber-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.01] disabled:opacity-60"
+            >
+              {savingCourse
+                ? "Saving..."
+                : editingCourse
+                ? "Save Changes"
+                : "Create Course"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PeriodSwitcher({
+  title,
+  description,
+  periods,
+  selectedId,
+  liveId,
+  loading,
+  mode,
+  onChange,
+}: {
+  title: string;
+  description: string;
+  periods: AcademicPeriod[];
+  selectedId: string;
+  liveId: string;
+  loading: boolean;
+  mode: "workspace" | "live";
+  onChange: (id: string) => void;
+}) {
+  return (
+    <div className="rounded-[28px] border border-orange/10 bg-soft p-4 dark:border-white/10 dark:bg-slate-950/40">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-black text-navy dark:text-white">
+            {title}
+          </h3>
+          <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-300">
+            {description}
+          </p>
+        </div>
+
+        {mode === "live" && (
+          <span className="rounded-full bg-green-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-green-600 dark:text-green-300">
+            Student Access
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {periods.map((period) => {
+          const active = selectedId === period.id;
+          const live = liveId === period.id;
+
+          return (
+            <button
+              key={period.id}
+              onClick={() => onChange(period.id)}
+              disabled={loading}
+              className={`rounded-2xl border px-4 py-2 text-xs font-black transition ${
+                active
+                  ? "border-orange bg-orange text-white shadow-lg shadow-orange-500/20"
+                  : "border-orange/10 bg-white/70 text-navy hover:border-orange hover:text-orange dark:border-white/10 dark:bg-white/10 dark:text-white"
+              }`}
+            >
+              {period.name}
+              {live && mode === "workspace" ? " • Live" : ""}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SharePanel({
+  isOpen,
+  selectedCourse,
+  shares,
+  shareForm,
+  savingShare,
+  isSuperAdmin,
+  departmentOptions,
+  levelOptions,
+  facultyOptions,
+  sharePeriods,
+  onClose,
+  onSchoolChange,
+  onFacultyChange,
+  onDepartmentChange,
+  onFormChange,
+  onCreateShare,
+  onDeleteShare,
+}: any) {
+  return (
+    <div
+      className={`rounded-[28px] border border-orange/10 bg-white/85 p-5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/10 ${
+        isOpen ? "block" : "hidden xl:block"
+      }`}
+    >
+      {selectedCourse ? (
+        <>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-orange">
+                Share Course
+              </p>
+              <h3 className="mt-2 text-2xl font-black text-navy dark:text-white">
+                {selectedCourse.code}
+              </h3>
+              <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-300">
+                Share this course with another department without duplicating it.
+              </p>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="grid h-10 w-10 place-items-center rounded-2xl bg-soft text-navy transition hover:bg-orange hover:text-white dark:bg-white/10 dark:text-white xl:hidden"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            <Select
+              label="School"
+              value={shareForm.school}
+              onChange={onSchoolChange}
+              options={["LASU", "LASUCOM"]}
+            />
+
+            {shareForm.school === "LASU" && (
+              <Select
+                label="Faculty"
+                value={shareForm.faculty}
+                onChange={onFacultyChange}
+                options={["", ...facultyOptions]}
+              />
+            )}
+
+            <Select
+              label="Department"
+              value={shareForm.department}
+              onChange={onDepartmentChange}
+              options={["", ...departmentOptions]}
+            />
+
+            <Select
+              label="Level"
+              value={shareForm.level}
+              onChange={(value: string) =>
+                onFormChange((prev: any) => ({ ...prev, level: value, academic_period_id: "" }))
+              }
+              options={levelOptions}
+            />
+
+            <Select
+              label="Period"
+              value={shareForm.academic_period_id}
+              onChange={(value: string) =>
+                onFormChange((prev: any) => ({ ...prev, academic_period_id: value }))
+              }
+              options={["", ...sharePeriods.map((item: AcademicPeriod) => item.id)]}
+              labels={{
+                "": "Select Period",
+                ...Object.fromEntries(sharePeriods.map((item: AcademicPeriod) => [item.id, item.name])),
+              }}
+            />
+
+            <button
+              onClick={onCreateShare}
+              disabled={savingShare}
+              className="w-full rounded-2xl bg-gradient-to-r from-orange to-amber-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.01] disabled:opacity-60"
+            >
+              {savingShare ? "Sharing..." : "Share Course"}
+            </button>
+          </div>
+
+          <div className="mt-7">
+            <h4 className="text-sm font-black text-navy dark:text-white">
+              Shared Departments
+            </h4>
+
+            <div className="mt-3 space-y-3">
+              {shares.length === 0 ? (
+                <div className="rounded-3xl bg-soft p-5 text-center dark:bg-slate-950/50">
+                  <p className="text-sm font-black text-navy dark:text-white">
+                    No shared departments yet
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-300">
+                    Share this course when another department needs access.
+                  </p>
+                </div>
+              ) : (
+                shares.map((item: CourseShare) => (
+                  <div
+                    key={item.id}
+                    className="rounded-3xl border border-orange/10 bg-soft p-4 dark:border-white/10 dark:bg-slate-950/50"
+                  >
+                    <p className="font-black text-navy dark:text-white">
+                      {item.department} • {item.level}
+                    </p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-300">
+                      {item.school}
+                      {item.faculty ? ` / ${item.faculty}` : ""}
+                    </p>
+                    <p className="mt-1 text-xs font-black text-orange">
+                      {item.academic_periods?.name || "Period"}
+                    </p>
+
+                    {isSuperAdmin && (
+                      <button
+                        onClick={() => onDeleteShare(item)}
+                        className="mt-3 text-xs font-black text-red-600 transition hover:text-red-700 dark:text-red-300"
+                      >
+                        Remove Access
+                      </button>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           </div>
+        </>
+      ) : (
+        <div className="py-10 text-center">
+          <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-orange/10 text-orange">
+            <GraduationCap size={28} />
+          </div>
+          <h3 className="mt-5 text-xl font-black text-navy dark:text-white">
+            Select a course
+          </h3>
+          <p className="mt-2 text-sm font-semibold text-slate-500 dark:text-slate-300">
+            Choose a course to share it with another department.
+          </p>
         </div>
       )}
     </div>
@@ -870,9 +1475,30 @@ function SummaryCard({ label, value, icon: Icon, color }: any) {
       >
         <Icon size={21} />
       </div>
-      <p className="text-3xl font-black text-navy dark:text-white">{value}</p>
+      <p className="text-2xl font-black text-navy dark:text-white">{value}</p>
       <p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-300">
         {label}
+      </p>
+    </div>
+  );
+}
+
+function InfoPill({ text }: { text: string }) {
+  return (
+    <span className="rounded-full bg-soft px-3 py-1 text-[11px] font-black text-slate-500 dark:bg-slate-950/50 dark:text-slate-300">
+      {text || "Not set"}
+    </span>
+  );
+}
+
+function ReadOnlyBox({ label, value }: any) {
+  return (
+    <div className="rounded-2xl border border-orange/10 bg-soft px-4 py-3 dark:border-white/10 dark:bg-white/10">
+      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-black text-navy dark:text-white">
+        {value || "Not set"}
       </p>
     </div>
   );
@@ -893,7 +1519,7 @@ function Input({ label, value, onChange }: any) {
   );
 }
 
-function Select({ label, value, onChange, options }: any) {
+function Select({ label, value, onChange, options, labels }: any) {
   return (
     <label className="block">
       <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-300">
@@ -906,7 +1532,7 @@ function Select({ label, value, onChange, options }: any) {
       >
         {options.map((item: string) => (
           <option key={item || "placeholder"} value={item}>
-            {item || `Select ${label}`}
+            {labels?.[item] || item || `Select ${label}`}
           </option>
         ))}
       </select>

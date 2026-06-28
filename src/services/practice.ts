@@ -18,8 +18,20 @@ export type PracticeAttempt = {
     level: string | null;
   };
   course?: {
+    id?: string;
     code: string;
     title: string;
+    school?: string | null;
+    faculty?: string | null;
+    department?: string | null;
+    level?: string | null;
+    semester?: string | null;
+    academic_period_id?: string | null;
+    academic_periods?: {
+      id: string;
+      name: string;
+      period_type: "semester" | "block";
+    } | null;
   };
 };
 
@@ -45,11 +57,21 @@ export type PracticeAnswer = {
   };
 };
 
-export async function getPracticeAttempts() {
-  const { data: attempts, error } = await supabase
+export async function getPracticeAttempts(filters?: { course_ids?: string[] }) {
+  if (filters?.course_ids && filters.course_ids.length === 0) {
+    return [] as PracticeAttempt[];
+  }
+
+  let attemptsQuery = supabase
     .from("practice_attempts")
     .select("*")
     .order("created_at", { ascending: false });
+
+  if (filters?.course_ids && filters.course_ids.length > 0) {
+    attemptsQuery = attemptsQuery.in("course_id", filters.course_ids);
+  }
+
+  const { data: attempts, error } = await attemptsQuery;
 
   if (error) throw error;
 
@@ -64,7 +86,24 @@ export async function getPracticeAttempts() {
 
     supabase
       .from("courses")
-      .select("id, code, title")
+      .select(
+        `
+        id,
+        code,
+        title,
+        school,
+        faculty,
+        department,
+        level,
+        semester,
+        academic_period_id,
+        academic_periods (
+          id,
+          name,
+          period_type
+        )
+        `
+      )
       .in("id", courseIds.length ? courseIds : ["00000000-0000-0000-0000-000000000000"]),
   ]);
 

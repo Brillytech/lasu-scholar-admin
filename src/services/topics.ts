@@ -10,22 +10,58 @@ export type Topic = {
   summary_3: string | null;
   created_at: string;
   courses?: {
+    id?: string;
     code: string;
     title: string;
+    school?: string | null;
+    faculty?: string | null;
+    department?: string | null;
+    level?: string | null;
+    semester?: string | null;
+    academic_period_id?: string | null;
+    academic_periods?: {
+      id: string;
+      name: string;
+      period_type: "semester" | "block";
+    } | null;
   };
 };
 
-export async function getTopics() {
-  const { data, error } = await supabase
+export async function getTopics(filters?: { course_ids?: string[] }) {
+  if (filters?.course_ids && filters.course_ids.length === 0) {
+    return [] as Topic[];
+  }
+
+  let query = supabase
     .from("topics")
-    .select(`
+    .select(
+      `
       *,
       courses (
+        id,
         code,
-        title
+        title,
+        school,
+        faculty,
+        department,
+        level,
+        semester,
+        academic_period_id,
+        academic_periods (
+          id,
+          name,
+          period_type
+        )
       )
-    `)
+    `
+    )
     .order("created_at", { ascending: false });
+
+  if (filters?.course_ids && filters.course_ids.length > 0) {
+    query = query.in("course_id", filters.course_ids);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
 
@@ -42,7 +78,14 @@ export async function createTopic(payload: {
 }) {
   const { data, error } = await supabase
     .from("topics")
-    .insert(payload)
+    .insert({
+      course_id: payload.course_id,
+      title: payload.title.trim(),
+      description: payload.description.trim(),
+      summary_1: payload.summary_1.trim(),
+      summary_2: payload.summary_2.trim(),
+      summary_3: payload.summary_3.trim(),
+    })
     .select()
     .single();
 
@@ -64,7 +107,14 @@ export async function updateTopic(
 ) {
   const { data, error } = await supabase
     .from("topics")
-    .update(payload)
+    .update({
+      course_id: payload.course_id,
+      title: payload.title.trim(),
+      description: payload.description.trim(),
+      summary_1: payload.summary_1.trim(),
+      summary_2: payload.summary_2.trim(),
+      summary_3: payload.summary_3.trim(),
+    })
     .eq("id", id)
     .select()
     .single();
