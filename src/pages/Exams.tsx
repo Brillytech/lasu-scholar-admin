@@ -204,7 +204,6 @@ export default function Exams() {
   const [answersLoading, setAnswersLoading] = useState(false);
   const [visibleCount, setVisibleCount] = useState(50);
 
-  const facultyOptions = Object.keys(LASU_DATA);
   const departmentOptions = getDepartmentOptions(context.school, context.faculty);
   const levelOptions = getLevelOptions(context.school, context.department);
 
