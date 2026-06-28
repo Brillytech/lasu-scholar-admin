@@ -9,7 +9,6 @@ import {
   GraduationCap,
   Library,
   ListChecks,
-  Megaphone,
   Plus,
   RefreshCw,
   Share2,
@@ -283,7 +282,7 @@ export default function Dashboard() {
             <h3 className="mt-3 text-2xl font-black">Control Center</h3>
 
             <p className="mt-3 text-sm font-semibold leading-6 text-white/70">
-              Quick access to the major admin actions.
+              Shortcuts for common admin tasks.
             </p>
 
             <div className="mt-5 space-y-3">
@@ -312,35 +311,6 @@ export default function Dashboard() {
                 );
               })}
             </div>
-          </div>
-
-          <div className="rounded-[28px] border border-orange/10 bg-white/85 p-5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/10 sm:p-6">
-            <div className="flex items-center gap-3">
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-orange/10 text-orange">
-                <Megaphone size={22} />
-              </div>
-
-              <div>
-                <h3 className="font-black text-navy dark:text-white">
-                  Notifications
-                </h3>
-                <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-300">
-                  Ready for the next update.
-                </p>
-              </div>
-            </div>
-
-            <p className="mt-4 text-sm font-semibold leading-6 text-slate-500 dark:text-slate-300">
-              We can add admin posting for announcements, exam alerts, material updates and targeted department notifications here.
-            </p>
-
-            <Link
-              to="/notifications"
-              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-orange/10 px-5 py-3 text-sm font-black text-orange transition hover:bg-orange hover:text-white"
-            >
-              Open Notifications
-              <ArrowRight size={16} />
-            </Link>
           </div>
         </div>
       </div>
