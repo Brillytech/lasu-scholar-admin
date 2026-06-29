@@ -22,3 +22,28 @@ export async function getStudents() {
 
   return data as Student[];
 }
+
+export async function promoteLasucom100LevelDepartment(department: string) {
+  const targetDepartment = department.trim();
+
+  if (!targetDepartment) {
+    throw new Error("Department is required.");
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({
+      level: "200L",
+      school: "LASUCOM",
+      faculty: "College of Medicine",
+    })
+    .eq("school", "LASUCOM")
+    .eq("department", targetDepartment)
+    .in("level", ["100L", "100 Level"])
+    .eq("role", "student")
+    .select("*");
+
+  if (error) throw error;
+
+  return data as Student[];
+}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   Eye,
+  GraduationCap,
   Search,
   ShieldCheck,
   UserCheck,
@@ -9,10 +10,36 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import { createAdminLog } from "../services/adminLogs";
+import { useAdminAuth } from "../context/AuthContext";
 import type { Student } from "../services/students";
-import { getStudents } from "../services/students";
+import {
+  getStudents,
+  promoteLasucom100LevelDepartment,
+} from "../services/students";
+
+const LASUCOM_DEPARTMENTS = [
+  "Dentistry",
+  "Medical Laboratory Science",
+  "Medicine and Surgery",
+  "Nursing",
+  "Pharmacy",
+  "Pharmacology",
+  "Physiology",
+  "Physiotherapy",
+  "Radiography and Radiation Science",
+];
+
+function isLasucom100L(student: Student) {
+  return (
+    student.school === "LASUCOM" &&
+    (student.level === "100L" || student.level === "100 Level")
+  );
+}
 
 export default function Students() {
+  const { profile } = useAdminAuth();
+
   const [students, setStudents] = useState<Student[]>([]);
   const [search, setSearch] = useState("");
   const [schoolFilter, setSchoolFilter] = useState("");
@@ -21,6 +48,9 @@ export default function Students() {
   const [loading, setLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(50);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+
+  const [promotionDepartment, setPromotionDepartment] = useState("");
+  const [promoting, setPromoting] = useState(false);
 
   useEffect(() => {
     loadStudents();
@@ -35,6 +65,54 @@ export default function Students() {
       alert(error.message || "Could not load students.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  const promotionStudents = useMemo(() => {
+    if (!promotionDepartment) return [];
+
+    return students.filter(
+      (student) =>
+        isLasucom100L(student) && student.department === promotionDepartment
+    );
+  }, [students, promotionDepartment]);
+
+  async function handlePromoteDepartment() {
+    if (!promotionDepartment) {
+      alert("Select a LASUCOM department first.");
+      return;
+    }
+
+    if (promotionStudents.length === 0) {
+      alert("No LASUCOM 100L students found in this department.");
+      return;
+    }
+
+    const confirmed = confirm(
+      `Promote ${promotionStudents.length} ${promotionDepartment} 100L student(s) to 200L?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setPromoting(true);
+
+      const updated = await promoteLasucom100LevelDepartment(promotionDepartment);
+
+      await createAdminLog({
+        admin_id: profile?.id,
+        action: "PROMOTE_LASUCOM_100L",
+        target_table: "profiles",
+        target_id: updated?.[0]?.id || "department-promotion",
+        description: `Promoted ${updated.length} ${promotionDepartment} student(s) from 100L to 200L`,
+      });
+
+      await loadStudents();
+      alert(`Promoted ${updated.length} student(s) to 200L.`);
+    } catch (error: any) {
+      alert(error.message || "Could not promote students.");
+    } finally {
+      setPromoting(false);
     }
   }
 
@@ -65,6 +143,7 @@ export default function Students() {
 
   const visibleStudents = filteredStudents.slice(0, visibleCount);
   const hasMoreStudents = filteredStudents.length > visibleCount;
+  const lasucom100Count = students.filter(isLasucom100L).length;
 
   return (
     <div>
@@ -88,6 +167,58 @@ export default function Students() {
           <ShieldCheck size={18} />
           Refresh Students
         </button>
+      </div>
+
+      <div className="mb-6 rounded-[30px] border border-orange/10 bg-white/85 p-5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/10 sm:p-6">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-orange">
+              LASUCOM Promotion
+            </p>
+            <h2 className="mt-2 text-2xl font-black text-navy dark:text-white">
+              100L to 200L
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm font-semibold text-slate-500 dark:text-slate-300">
+              Promote LASUCOM students by department when they move from Ojo phase to 200L.
+            </p>
+          </div>
+
+          <div className="grid w-full grid-cols-1 gap-3 md:grid-cols-[1fr_auto] xl:max-w-xl">
+            <select
+              value={promotionDepartment}
+              onChange={(e) => setPromotionDepartment(e.target.value)}
+              className="h-12 rounded-2xl border border-orange/10 bg-soft px-4 text-sm font-bold text-navy shadow-sm outline-none backdrop-blur-xl dark:border-white/10 dark:bg-white/10 dark:text-white"
+            >
+              <option value="">Select Department</option>
+              {LASUCOM_DEPARTMENTS.map((department) => (
+                <option key={department} value={department}>
+                  {department}
+                </option>
+              ))}
+            </select>
+
+            <button
+              onClick={handlePromoteDepartment}
+              disabled={promoting || !promotionDepartment}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-navy px-5 py-3 text-sm font-black text-white transition hover:scale-[1.02] disabled:opacity-60 dark:bg-white/10"
+            >
+              <GraduationCap size={18} />
+              {promoting ? "Promoting..." : "Promote"}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <MiniStat label="LASUCOM 100L" value={lasucom100Count} />
+          <MiniStat
+            label="Selected Dept"
+            value={promotionStudents.length}
+          />
+          <MiniStat
+            label="Destination"
+            value={promotionDepartment ? "200L" : "--"}
+          />
+        </div>
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -157,6 +288,10 @@ export default function Students() {
           <option value="100 Level">100 Level</option>
           <option value="200L">200L</option>
           <option value="200 Level">200 Level</option>
+          <option value="300L">300L</option>
+          <option value="400L">400L</option>
+          <option value="500L">500L</option>
+          <option value="600L">600L</option>
         </select>
 
         <select
@@ -398,12 +533,23 @@ export default function Students() {
                 Admin Actions
               </p>
               <p className="mt-2 text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">
-                Block, delete, reset progress and advanced student actions should be added only after we finalize admin role permissions.
+                Student promotion is handled by department from the main Students page.
               </p>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-3xl bg-soft p-4 text-center dark:bg-slate-950/50">
+      <p className="text-2xl font-black text-navy dark:text-white">{value}</p>
+      <p className="mt-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+        {label}
+      </p>
     </div>
   );
 }

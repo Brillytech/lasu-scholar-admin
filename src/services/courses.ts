@@ -37,6 +37,8 @@ export type Course = {
   department: string | null;
   level: string | null;
   academic_period_id: string | null;
+  course_icon?: string | null;
+  course_color?: string | null;
   created_at: string;
   academic_periods?: AcademicPeriod | null;
   is_shared?: boolean;
@@ -55,6 +57,8 @@ export type CourseShare = {
   department: string;
   level: string;
   academic_period_id: string | null;
+  course_icon?: string | null;
+  course_color?: string | null;
   created_at: string;
   academic_periods?: AcademicPeriod | null;
   is_shared?: boolean;
@@ -88,8 +92,20 @@ function normalizeDepartment(value?: string | null) {
   return cleanValue(value).toLowerCase();
 }
 
-export function getAcademicPeriodType(department?: string | null): AcademicPeriodType {
+export function getAcademicPeriodType(
+  department?: string | null,
+  level?: string | null
+): AcademicPeriodType {
   const cleanDepartment = normalizeDepartment(department);
+  const cleanLevel = cleanValue(level).toLowerCase();
+
+  /*
+    LASUCOM 100L should remain semester-based.
+    Block system starts from 200L for Medicine/Dentistry.
+  */
+  if (cleanLevel === "100l") {
+    return "semester";
+  }
 
   if (
     cleanDepartment.includes("medicine") ||
@@ -103,8 +119,11 @@ export function getAcademicPeriodType(department?: string | null): AcademicPerio
   return "semester";
 }
 
-export function getDefaultPeriodNames(department?: string | null) {
-  const periodType = getAcademicPeriodType(department);
+export function getDefaultPeriodNames(
+  department?: string | null,
+  level?: string | null
+) {
+  const periodType = getAcademicPeriodType(department, level);
 
   if (periodType === "block") {
     return ["Block 1", "Block 2", "Block 3", "Block 4"];
@@ -161,8 +180,8 @@ export async function ensureAcademicPeriods(payload: {
 
   if (existing.length > 0) return existing;
 
-  const periodType = getAcademicPeriodType(context.department);
-  const names = getDefaultPeriodNames(context.department);
+  const periodType = getAcademicPeriodType(context.department, context.level);
+  const names = getDefaultPeriodNames(context.department, context.level);
 
   const rows = names.map((name, index) => ({
     ...context,
@@ -379,6 +398,8 @@ export async function createCourse(payload: {
   department: string;
   level: string;
   academic_period_id: string;
+  course_icon?: string | null;
+  course_color?: string | null;
 }) {
   const periodId = cleanValue(payload.academic_period_id);
 
@@ -402,6 +423,8 @@ export async function createCourse(payload: {
       department: cleanValue(payload.department),
       level: cleanValue(payload.level),
       academic_period_id: periodId,
+      course_icon: cleanValue(payload.course_icon || "book"),
+      course_color: cleanValue(payload.course_color || "orange"),
     })
     .select("*, academic_periods (*)")
     .single();
@@ -422,6 +445,8 @@ export async function updateCourse(
     department?: string;
     level?: string;
     academic_period_id?: string | null;
+    course_icon?: string | null;
+    course_color?: string | null;
   }
 ) {
   const updatePayload: Record<string, any> = {
@@ -438,6 +463,8 @@ export async function updateCourse(
   if (payload.academic_period_id !== undefined) {
     updatePayload.academic_period_id = cleanNullable(payload.academic_period_id);
   }
+  if (payload.course_icon !== undefined) updatePayload.course_icon = cleanValue(payload.course_icon || "book");
+  if (payload.course_color !== undefined) updatePayload.course_color = cleanValue(payload.course_color || "orange");
 
   const { data, error } = await supabase
     .from("courses")

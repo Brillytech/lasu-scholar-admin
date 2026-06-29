@@ -1,16 +1,52 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Activity,
+  Atom,
+  BarChart3,
+  Beaker,
   BookOpen,
+  Brain,
+  Briefcase,
+  Bug,
+  Calculator,
   CheckCircle2,
+  CircuitBoard,
+  Code2,
+  Cog,
+  Cpu,
+  Database,
+  Dna,
   Edit3,
+  FileText,
+  FlaskConical,
   GraduationCap,
+  HeartPulse,
+  Hospital,
+  Landmark,
+  Languages,
   Layers3,
+  Leaf,
+  Library,
+  Microscope,
+  Music,
+  NotebookPen,
+  PenTool,
+  Pill,
   Plus,
+  Scale,
   Search,
   Share2,
+  ShieldPlus,
   SlidersHorizontal,
+  Stethoscope,
+  Syringe,
+  TestTube,
+  Theater,
   Trash2,
+  Users,
+  Wrench,
   X,
+  Zap,
 } from "lucide-react";
 import { useAdminAuth } from "../context/AuthContext";
 import { createAdminLog } from "../services/adminLogs";
@@ -179,6 +215,8 @@ const emptyCourseForm = {
   department: "",
   level: "100L",
   academic_period_id: "",
+  course_icon: "book",
+  course_color: "orange",
 };
 
 const emptyShareForm = {
@@ -188,6 +226,87 @@ const emptyShareForm = {
   level: "100L",
   academic_period_id: "",
 };
+
+const COURSE_ICONS = [
+  { label: "Book", value: "book", icon: BookOpen },
+  { label: "Notebook", value: "notebook", icon: NotebookPen },
+  { label: "Library", value: "library", icon: Library },
+  { label: "Graduation", value: "graduation", icon: GraduationCap },
+  { label: "Document", value: "document", icon: FileText },
+
+  { label: "Stethoscope", value: "stethoscope", icon: Stethoscope },
+  { label: "Nursing", value: "nursing", icon: Stethoscope },
+  { label: "Medicine", value: "medicine", icon: Hospital },
+  { label: "Clinical", value: "clinical", icon: Activity },
+  { label: "Anatomy", value: "anatomy", icon: HeartPulse },
+  { label: "Heart", value: "heart", icon: HeartPulse },
+  { label: "Brain", value: "brain", icon: Brain },
+  { label: "Biology", value: "biology", icon: Dna },
+  { label: "DNA", value: "dna", icon: Dna },
+  { label: "Microscope", value: "microscope", icon: Microscope },
+  { label: "Laboratory", value: "lab", icon: Microscope },
+  { label: "Pharmacy", value: "pharmacy", icon: Pill },
+  { label: "Pill", value: "pill", icon: Pill },
+  { label: "Injection", value: "injection", icon: Syringe },
+  { label: "Dentistry", value: "dentistry", icon: ShieldPlus },
+
+  { label: "Chemistry", value: "chemistry", icon: FlaskConical },
+  { label: "Flask", value: "flask", icon: FlaskConical },
+  { label: "Test Tube", value: "test-tube", icon: TestTube },
+  { label: "Beaker", value: "beaker", icon: Beaker },
+  { label: "Atom", value: "atom", icon: Atom },
+  { label: "Plant", value: "plant", icon: Leaf },
+  { label: "Microbiology", value: "microbiology", icon: Bug },
+
+  { label: "Maths", value: "math", icon: Calculator },
+  { label: "Statistics", value: "statistics", icon: BarChart3 },
+  { label: "Research", value: "research", icon: BarChart3 },
+
+  { label: "Electricity", value: "bolt", icon: Zap },
+  { label: "CPU", value: "cpu", icon: Cpu },
+  { label: "Code", value: "code", icon: Code2 },
+  { label: "Database", value: "database", icon: Database },
+  { label: "Circuit", value: "circuit", icon: CircuitBoard },
+  { label: "Engineering", value: "engineering", icon: Wrench },
+  { label: "Technology", value: "technology", icon: Cog },
+
+  { label: "Business", value: "business", icon: Briefcase },
+  { label: "Economics", value: "economics", icon: Landmark },
+  { label: "Management", value: "management", icon: Users },
+
+  { label: "Law", value: "law", icon: Scale },
+  { label: "Language", value: "language", icon: Languages },
+  { label: "Music", value: "music", icon: Music },
+  { label: "Theatre", value: "theatre", icon: Theater },
+  { label: "Writing", value: "writing", icon: PenTool },
+];
+
+const COURSE_COLORS = [
+  { label: "Orange", value: "orange", bg: "#fff2df", fg: "#f97316", border: "#fed7aa" },
+  { label: "Blue", value: "blue", bg: "#eaf2ff", fg: "#2563eb", border: "#bfdbfe" },
+  { label: "Green", value: "green", bg: "#eafaf1", fg: "#16a34a", border: "#bbf7d0" },
+  { label: "Purple", value: "purple", bg: "#f3e8ff", fg: "#9333ea", border: "#e9d5ff" },
+  { label: "Red", value: "red", bg: "#fee2e2", fg: "#dc2626", border: "#fecaca" },
+  { label: "Gold", value: "gold", bg: "#fef9c3", fg: "#ca8a04", border: "#fde68a" },
+];
+
+function getCourseIcon(value?: string | null) {
+  const aliases: Record<string, string> = {
+    tooth: "dentistry",
+    chart: "statistics",
+    hospital: "medicine",
+    doctor: "stethoscope",
+    lab: "microscope",
+    biology: "dna",
+  };
+
+  const cleanValue = value ? aliases[value] || value : "book";
+  return COURSE_ICONS.find((item) => item.value === cleanValue)?.icon || BookOpen;
+}
+
+function getCourseColor(value?: string | null) {
+  return COURSE_COLORS.find((item) => item.value === value) || COURSE_COLORS[0];
+}
 
 function clean(value?: string | null) {
   return String(value || "").trim();
@@ -204,13 +323,15 @@ function getDepartmentOptions(school: string, faculty: string) {
 }
 
 function getLevelOptions(school: string, department?: string) {
+  void department;
+
   if (school !== "LASUCOM") return ["100L", "200L", "300L", "400L", "500L"];
 
-  const periodType = getAcademicPeriodType(department);
-
-  if (periodType === "block") return ["200L", "300L"];
-
-  return ["200L", "300L", "400L", "500L"];
+  /*
+    LASUCOM students can have real 100L department courses.
+    100L stays semester-based; Medicine/Dentistry switch to blocks from 200L upward.
+  */
+  return ["100L", "200L", "300L", "400L", "500L", "600L"];
 }
 
 export default function Courses() {
@@ -256,7 +377,7 @@ export default function Courses() {
   const workspacePeriod = periods.find((item) => item.id === workspacePeriodId) || null;
   const livePeriod = periods.find((item) => item.id === livePeriodId) || null;
 
-  const periodType = getAcademicPeriodType(context.department);
+  const periodType = getAcademicPeriodType(context.department, context.level);
 
   useEffect(() => {
     loadAcademicWorkspace();
@@ -405,7 +526,7 @@ export default function Courses() {
         school: "LASUCOM",
         faculty: "College of Medicine",
         department: "",
-        level: "200L",
+        level: "100L",
       });
       return;
     }
@@ -442,7 +563,7 @@ export default function Courses() {
         school: "LASUCOM",
         faculty: "College of Medicine",
         department: "",
-        level: "200L",
+        level: "100L",
         academic_period_id: "",
       });
       return;
@@ -589,6 +710,8 @@ export default function Courses() {
       department: course.department || context.department,
       level: course.level || context.level,
       academic_period_id: course.academic_period_id || workspacePeriodId,
+      course_icon: course.course_icon || "book",
+      course_color: course.course_color || "orange",
     });
     setCourseModalOpen(true);
   }
@@ -622,6 +745,8 @@ export default function Courses() {
           department: courseForm.department,
           level: courseForm.level,
           academic_period_id: courseForm.academic_period_id,
+          course_icon: courseForm.course_icon,
+          course_color: courseForm.course_color,
         });
 
         await createAdminLog({
@@ -642,6 +767,8 @@ export default function Courses() {
           department: courseForm.department,
           level: courseForm.level,
           academic_period_id: courseForm.academic_period_id,
+          course_icon: courseForm.course_icon,
+          course_color: courseForm.course_color,
         });
 
         await createAdminLog({
@@ -1011,6 +1138,8 @@ export default function Courses() {
                   const isExpanded = expandedCourses.includes(course.id);
                   const periodName =
                     course.academic_periods?.name || course.semester || "Period";
+                  const courseColor = getCourseColor(course.course_color);
+                  const CourseIcon = getCourseIcon(course.course_icon);
 
                   return (
                     <div
@@ -1018,16 +1147,29 @@ export default function Courses() {
                       className="rounded-[28px] border border-orange/10 bg-white/85 p-5 shadow-sm backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-white/10"
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-xs font-black uppercase tracking-[0.18em] text-orange">
-                            {periodName}
-                          </p>
-                          <h3 className="mt-2 text-2xl font-black text-navy dark:text-white">
-                            {course.code}
-                          </h3>
-                          <p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-300">
-                            {course.title}
-                          </p>
+                        <div className="flex min-w-0 gap-3">
+                          <div
+                            className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border"
+                            style={{
+                              backgroundColor: courseColor.bg,
+                              color: courseColor.fg,
+                              borderColor: courseColor.border,
+                            }}
+                          >
+                            <CourseIcon size={27} strokeWidth={2.6} />
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="text-xs font-black uppercase tracking-[0.18em] text-orange">
+                              {periodName}
+                            </p>
+                            <h3 className="mt-2 text-2xl font-black text-navy dark:text-white">
+                              {course.code}
+                            </h3>
+                            <p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-300">
+                              {course.title}
+                            </p>
+                          </div>
                         </div>
 
                         <div className="flex flex-col items-end gap-2">
@@ -1077,6 +1219,8 @@ export default function Courses() {
                               <p>Original Department: {course.source_department || "Not set"}</p>
                             )}
                             <p>Level: {course.level || "Not set"}</p>
+                            <p>Icon: {COURSE_ICONS.find((item) => item.value === course.course_icon)?.label || "Book"}</p>
+                            <p>Color: {COURSE_COLORS.find((item) => item.value === course.course_color)?.label || "Orange"}</p>
                             <p>Status: {course.status || "active"}</p>
                           </div>
                         </div>
@@ -1216,6 +1360,30 @@ export default function Courses() {
                   setCourseForm((prev) => ({ ...prev, status: value }))
                 }
                 options={["active", "inactive"]}
+              />
+
+              <Select
+                label="Course Icon"
+                value={courseForm.course_icon}
+                onChange={(value: string) =>
+                  setCourseForm((prev) => ({ ...prev, course_icon: value }))
+                }
+                options={COURSE_ICONS.map((item) => item.value)}
+                labels={Object.fromEntries(
+                  COURSE_ICONS.map((item) => [item.value, item.label])
+                )}
+              />
+
+              <Select
+                label="Course Color"
+                value={courseForm.course_color}
+                onChange={(value: string) =>
+                  setCourseForm((prev) => ({ ...prev, course_color: value }))
+                }
+                options={COURSE_COLORS.map((item) => item.value)}
+                labels={Object.fromEntries(
+                  COURSE_COLORS.map((item) => [item.value, item.label])
+                )}
               />
             </div>
 
@@ -1539,3 +1707,4 @@ function Select({ label, value, onChange, options, labels }: any) {
     </label>
   );
 }
+
