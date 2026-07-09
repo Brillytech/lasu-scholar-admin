@@ -1,6 +1,13 @@
 import { supabase } from "../lib/supabase";
 
-export type NotificationAudience = "all" | "school" | "faculty" | "department" | "level" | "admin";
+export type NotificationAudience =
+  | "all"
+  | "school"
+  | "faculty"
+  | "department"
+  | "level"
+  | "admin";
+
 export type NotificationPriority = "normal" | "important" | "urgent";
 export type NotificationSource = "admin" | "system";
 
@@ -170,12 +177,22 @@ export async function createSystemNotification(payload: {
 }
 
 export async function markNotificationAsRead(id: string) {
-  const { error } = await supabase
+  if (!id) throw new Error("Notification id is missing.");
+
+  const { error, count } = await supabase
     .from("notifications")
-    .update({ is_read: true })
+    .update({ is_read: true }, { count: "exact" })
     .eq("id", id);
 
   if (error) throw error;
+
+  if (!count) {
+    throw new Error(
+      "Notification was not marked as read. It may have been deleted already or blocked by Supabase RLS."
+    );
+  }
+
+  return true;
 }
 
 export async function markAllNotificationsAsRead() {
@@ -185,10 +202,25 @@ export async function markAllNotificationsAsRead() {
     .eq("is_read", false);
 
   if (error) throw error;
+
+  return true;
 }
 
 export async function deleteNotification(id: string) {
-  const { error } = await supabase.from("notifications").delete().eq("id", id);
+  if (!id) throw new Error("Notification id is missing.");
+
+  const { error, count } = await supabase
+    .from("notifications")
+    .delete({ count: "exact" })
+    .eq("id", id);
 
   if (error) throw error;
+
+  if (!count) {
+    throw new Error(
+      "Notification was not deleted. It may be blocked by Supabase RLS/policy or the notification id was not found."
+    );
+  }
+
+  return true;
 }

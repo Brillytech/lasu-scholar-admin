@@ -5,9 +5,9 @@ export type Topic = {
   course_id: string;
   title: string;
   description: string | null;
-  summary_1: string | null;
-  summary_2: string | null;
-  summary_3: string | null;
+  summary_1?: string | null;
+  summary_2?: string | null;
+  summary_3?: string | null;
   created_at: string;
   courses?: {
     id?: string;
@@ -72,9 +72,6 @@ export async function createTopic(payload: {
   course_id: string;
   title: string;
   description: string;
-  summary_1: string;
-  summary_2: string;
-  summary_3: string;
 }) {
   const { data, error } = await supabase
     .from("topics")
@@ -82,9 +79,6 @@ export async function createTopic(payload: {
       course_id: payload.course_id,
       title: payload.title.trim(),
       description: payload.description.trim(),
-      summary_1: payload.summary_1.trim(),
-      summary_2: payload.summary_2.trim(),
-      summary_3: payload.summary_3.trim(),
     })
     .select()
     .single();
@@ -111,9 +105,6 @@ export async function updateTopic(
       course_id: payload.course_id,
       title: payload.title.trim(),
       description: payload.description.trim(),
-      summary_1: payload.summary_1.trim(),
-      summary_2: payload.summary_2.trim(),
-      summary_3: payload.summary_3.trim(),
     })
     .eq("id", id)
     .select()

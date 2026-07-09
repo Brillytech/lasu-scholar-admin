@@ -9,6 +9,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import SearchableSelect from "../components/SearchableSelect";
 import type { AcademicPeriod, AppPeriodControl, Course } from "../services/courses";
 import {
   ensureAcademicPeriods,
@@ -164,9 +165,6 @@ const emptyTopicForm = {
   course_id: "",
   title: "",
   description: "",
-  summary_1: "",
-  summary_2: "",
-  summary_3: "",
 };
 
 function clean(value?: string | null) {
@@ -211,7 +209,6 @@ export default function Topics() {
   const [topicForm, setTopicForm] = useState(emptyTopicForm);
 
   const [visibleCount, setVisibleCount] = useState(10);
-  const [expandedTopics, setExpandedTopics] = useState<string[]>([]);
 
   const facultyOptions = Object.keys(LASU_DATA);
   const departmentOptions = getDepartmentOptions(context.school, context.faculty);
@@ -412,17 +409,8 @@ export default function Topics() {
       course_id: topic.course_id || "",
       title: topic.title || "",
       description: topic.description || "",
-      summary_1: topic.summary_1 || "",
-      summary_2: topic.summary_2 || "",
-      summary_3: topic.summary_3 || "",
     });
     setTopicModalOpen(true);
-  }
-
-  function toggleTopicSummary(id: string) {
-    setExpandedTopics((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
   }
 
   async function handleSaveTopic() {
@@ -445,9 +433,6 @@ export default function Topics() {
         course_id: topicForm.course_id,
         title: topicForm.title.trim(),
         description: topicForm.description.trim(),
-        summary_1: topicForm.summary_1.trim(),
-        summary_2: topicForm.summary_2.trim(),
-        summary_3: topicForm.summary_3.trim(),
       };
 
       if (editingTopic) {
@@ -498,9 +483,6 @@ export default function Topics() {
       return (
         topic.title?.toLowerCase().includes(q) ||
         topic.description?.toLowerCase().includes(q) ||
-        topic.summary_1?.toLowerCase().includes(q) ||
-        topic.summary_2?.toLowerCase().includes(q) ||
-        topic.summary_3?.toLowerCase().includes(q) ||
         topic.courses?.code?.toLowerCase().includes(q) ||
         topic.courses?.title?.toLowerCase().includes(q) ||
         course?.code?.toLowerCase().includes(q) ||
@@ -656,7 +638,7 @@ export default function Topics() {
             setSearch(e.target.value);
             setVisibleCount(10);
           }}
-          placeholder="Search topic, course code, course title, summary..."
+          placeholder="Search topic, course code, course title..."
           className="w-full bg-transparent text-sm font-semibold text-navy outline-none placeholder:text-slate-400 dark:text-white"
         />
       </div>
@@ -686,12 +668,6 @@ export default function Topics() {
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {visibleTopics.map((topic) => {
-              const isExpanded = expandedTopics.includes(topic.id);
-              const summaries = [
-                topic.summary_1,
-                topic.summary_2,
-                topic.summary_3,
-              ].filter(Boolean);
               const course = courseById.get(topic.course_id);
               const isShared = Boolean(course?.is_shared);
 
@@ -728,32 +704,6 @@ export default function Topics() {
                   <p className="mt-4 line-clamp-3 text-sm font-semibold leading-6 text-slate-500 dark:text-slate-300">
                     {topic.description || "No description added yet."}
                   </p>
-
-                  {summaries.length > 0 && (
-                    <div className="mt-4">
-                      <button
-                        onClick={() => toggleTopicSummary(topic.id)}
-                        className="rounded-2xl bg-orange/10 px-4 py-2 text-xs font-black text-orange transition hover:bg-orange hover:text-white"
-                      >
-                        {isExpanded
-                          ? "Hide Summaries"
-                          : `View Summaries (${summaries.length})`}
-                      </button>
-
-                      {isExpanded && (
-                        <div className="mt-3 space-y-2">
-                          {summaries.map((summary, index) => (
-                            <div
-                              key={index}
-                              className="rounded-2xl bg-soft px-4 py-3 text-sm font-bold leading-6 text-slate-600 dark:bg-slate-950/50 dark:text-slate-200"
-                            >
-                              {summary}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
 
                   <div className="mt-5 flex flex-wrap gap-2">
                     {!isShared && (
@@ -834,15 +784,20 @@ export default function Topics() {
             </div>
 
             <div className="space-y-4">
-              <Select
+              <SearchableSelect
                 label="Course"
                 value={topicForm.course_id}
                 onChange={(value) =>
                   setTopicForm((prev) => ({ ...prev, course_id: value }))
                 }
+                placeholder="Select course"
+                searchPlaceholder="Search courses..."
+                emptyMessage="No owned course found"
+                clearable={false}
                 options={ownedCourses.map((course) => ({
                   label: `${course.code} - ${course.title}`,
                   value: course.id,
+                  description: course.academic_periods?.name || course.semester || undefined,
                 }))}
               />
 
@@ -859,30 +814,6 @@ export default function Topics() {
                 value={topicForm.description}
                 onChange={(value) =>
                   setTopicForm((prev) => ({ ...prev, description: value }))
-                }
-              />
-
-              <Textarea
-                label="Summary 1"
-                value={topicForm.summary_1}
-                onChange={(value) =>
-                  setTopicForm((prev) => ({ ...prev, summary_1: value }))
-                }
-              />
-
-              <Textarea
-                label="Summary 2"
-                value={topicForm.summary_2}
-                onChange={(value) =>
-                  setTopicForm((prev) => ({ ...prev, summary_2: value }))
-                }
-              />
-
-              <Textarea
-                label="Summary 3"
-                value={topicForm.summary_3}
-                onChange={(value) =>
-                  setTopicForm((prev) => ({ ...prev, summary_3: value }))
                 }
               />
 
@@ -1031,3 +962,4 @@ function SelectRaw({
     </label>
   );
 }
+

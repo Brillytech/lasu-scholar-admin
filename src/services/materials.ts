@@ -10,6 +10,7 @@ export type Material = {
   type: MaterialType | string;
   file_url: string | null;
   content: string | null;
+  summary_1: string | null;
   uploaded_by: string | null;
   created_at: string;
   video_url: string | null;
@@ -99,6 +100,7 @@ export async function createMaterial(payload: {
   type: MaterialType;
   file_url: string;
   content: string;
+  summary_1: string;
   video_url: string;
   thumbnail_url: string;
 }) {
@@ -115,6 +117,7 @@ export async function createMaterial(payload: {
       type: String(payload.type || "").toLowerCase() as MaterialType,
       file_url: payload.file_url.trim(),
       content: payload.content.trim(),
+      summary_1: payload.summary_1.trim(),
       video_url: payload.video_url.trim(),
       thumbnail_url: payload.thumbnail_url.trim(),
       uploaded_by: user?.id || null,
@@ -149,6 +152,7 @@ export async function updateMaterial(
       type: String(payload.type || "").toLowerCase() as MaterialType,
       file_url: payload.file_url.trim(),
       content: payload.content.trim(),
+      summary_1: payload.summary_1.trim(),
       video_url: payload.video_url.trim(),
       thumbnail_url: payload.thumbnail_url.trim(),
     })

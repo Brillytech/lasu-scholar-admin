@@ -9,6 +9,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import SearchableSelect from "../components/SearchableSelect";
 import { useAdminAuth } from "../context/AuthContext";
 import { createAdminLog } from "../services/adminLogs";
 import type { AcademicPeriod, AppPeriodControl, Course } from "../services/courses";
@@ -171,6 +172,7 @@ const emptyMaterialForm = {
   type: "pdf",
   file_url: "",
   content: "",
+  summary_1: "",
   video_url: "",
   thumbnail_url: "",
 };
@@ -463,6 +465,7 @@ export default function Materials() {
       type: String(material.type || "pdf").toLowerCase(),
       file_url: material.file_url || "",
       content: material.content || "",
+      summary_1: material.summary_1 || "",
       video_url: material.video_url || "",
       thumbnail_url: material.thumbnail_url || "",
     });
@@ -506,6 +509,7 @@ export default function Materials() {
         type: materialForm.type as MaterialType,
         file_url: materialForm.file_url.trim(),
         content: materialForm.content.trim(),
+        summary_1: materialForm.summary_1.trim(),
         video_url: materialForm.video_url.trim(),
         thumbnail_url: materialForm.thumbnail_url.trim(),
       };
@@ -586,6 +590,7 @@ export default function Materials() {
         material.title?.toLowerCase().includes(q) ||
         material.type?.toLowerCase().includes(q) ||
         material.content?.toLowerCase().includes(q) ||
+        material.summary_1?.toLowerCase().includes(q) ||
         material.courses?.code?.toLowerCase().includes(q) ||
         material.courses?.title?.toLowerCase().includes(q) ||
         material.topics?.title?.toLowerCase().includes(q) ||
@@ -752,38 +757,44 @@ export default function Materials() {
           />
         </div>
 
-        <select
+        <SearchableSelect
           value={courseFilter}
-          onChange={(e) => {
-            setCourseFilter(e.target.value);
+          onChange={(value) => {
+            setCourseFilter(value);
             setTopicFilter("");
             setVisibleCount(10);
           }}
-          className="h-12 rounded-2xl border border-orange/10 bg-white/85 px-4 text-sm font-bold text-navy shadow-sm outline-none backdrop-blur-xl dark:border-white/10 dark:bg-white/10 dark:text-white"
-        >
-          <option value="">All Courses</option>
-          {courses.map((course) => (
-            <option key={`${course.id}-${course.is_shared ? "shared" : "owned"}`} value={course.id}>
-              {course.code} - {course.title}{course.is_shared ? " (Shared)" : ""}
-            </option>
-          ))}
-        </select>
+          placeholder="All Courses"
+          searchPlaceholder="Search courses..."
+          emptyMessage="No course found"
+          options={[
+            { label: "All Courses", value: "" },
+            ...courses.map((course) => ({
+              label: `${course.code} - ${course.title}${course.is_shared ? " (Shared)" : ""}`,
+              value: course.id,
+              description: course.academic_periods?.name || course.semester || undefined,
+            })),
+          ]}
+        />
 
-        <select
+        <SearchableSelect
           value={topicFilter}
-          onChange={(e) => {
-            setTopicFilter(e.target.value);
+          onChange={(value) => {
+            setTopicFilter(value);
             setVisibleCount(10);
           }}
-          className="h-12 rounded-2xl border border-orange/10 bg-white/85 px-4 text-sm font-bold text-navy shadow-sm outline-none backdrop-blur-xl dark:border-white/10 dark:bg-white/10 dark:text-white"
-        >
-          <option value="">All Topics</option>
-          {filteredTopicsForFilter.map((topic) => (
-            <option key={topic.id} value={topic.id}>
-              {topic.title}
-            </option>
-          ))}
-        </select>
+          placeholder="All Topics"
+          searchPlaceholder="Search topics..."
+          emptyMessage={courseFilter ? "No topic found for this course" : "No topic found"}
+          options={[
+            { label: "All Topics", value: "" },
+            ...filteredTopicsForFilter.map((topic) => ({
+              label: topic.title,
+              value: topic.id,
+              description: courseById.get(topic.course_id)?.code || topic.courses?.code || undefined,
+            })),
+          ]}
+        />
       </div>
 
       {loading ? (
@@ -845,7 +856,7 @@ export default function Materials() {
                   </h3>
 
                   <p className="mt-2 line-clamp-3 text-sm font-semibold leading-6 text-slate-500 dark:text-slate-300">
-                    {material.content || "No content preview added yet."}
+                    {material.summary_1 || material.content || "No summary or content preview added yet."}
                   </p>
 
                   <button
@@ -860,6 +871,17 @@ export default function Materials() {
                       <Info label="File URL" value={material.file_url} />
                       <Info label="Video URL" value={material.video_url} />
                       <Info label="Thumbnail URL" value={material.thumbnail_url} />
+
+                      {material.summary_1 && (
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-[0.14em] text-orange">
+                            Summary
+                          </p>
+                          <p className="mt-2 text-sm font-semibold leading-6 text-slate-600 dark:text-slate-200">
+                            {material.summary_1}
+                          </p>
+                        </div>
+                      )}
 
                       {isShared && (
                         <p className="text-xs font-black text-blue-600 dark:text-blue-300">
@@ -959,25 +981,36 @@ export default function Materials() {
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Select
+              <SearchableSelect
                 label="Course"
                 value={materialForm.course_id}
                 onChange={handleCourseChange}
+                placeholder="Select course"
+                searchPlaceholder="Search courses..."
+                emptyMessage="No owned course found"
+                clearable={false}
                 options={ownedCourses.map((course) => ({
                   label: `${course.code} - ${course.title}`,
                   value: course.id,
+                  description: course.academic_periods?.name || course.semester || undefined,
                 }))}
               />
 
-              <Select
+              <SearchableSelect
                 label="Topic"
                 value={materialForm.topic_id}
                 onChange={(value: string) =>
                   setMaterialForm((prev) => ({ ...prev, topic_id: value }))
                 }
+                placeholder={materialForm.course_id ? "Select topic" : "Select course first"}
+                searchPlaceholder="Search topics..."
+                emptyMessage={materialForm.course_id ? "No topic found under this course" : "Select a course first"}
+                disabled={!materialForm.course_id}
+                clearable={false}
                 options={filteredTopicsForForm.map((topic) => ({
                   label: topic.title,
                   value: topic.id,
+                  description: courseById.get(topic.course_id)?.code || undefined,
                 }))}
               />
 
@@ -1036,6 +1069,19 @@ export default function Materials() {
                   setMaterialForm((prev) => ({ ...prev, content: value }))
                 }
               />
+            </div>
+
+            <div className="mt-4">
+              <Textarea
+                label="Material Summary"
+                value={materialForm.summary_1}
+                onChange={(value: string) =>
+                  setMaterialForm((prev) => ({ ...prev, summary_1: value }))
+                }
+              />
+              <p className="mt-2 text-xs font-bold text-slate-400">
+                This is the single summary students will see for this material in Study Mode.
+              </p>
             </div>
 
             <button
@@ -1176,3 +1222,4 @@ function SelectRaw({
     </label>
   );
 }
+

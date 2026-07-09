@@ -1707,4 +1707,3 @@ function Select({ label, value, onChange, options, labels }: any) {
     </label>
   );
 }
-

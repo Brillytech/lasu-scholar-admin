@@ -201,6 +201,9 @@ export default function Notifications() {
   const [sourceFilter, setSourceFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [markingId, setMarkingId] = useState<string | null>(null);
+  const [markingAll, setMarkingAll] = useState(false);
 
   const facultyOptions = getFacultyOptions(form.target_school);
   const departmentOptions = getDepartmentOptions(form.target_school, form.target_faculty);
@@ -215,6 +218,7 @@ export default function Notifications() {
       const data = await getNotifications(150);
       setNotifications(data);
     } catch (error: any) {
+      console.log("LOAD NOTIFICATIONS ERROR:", error);
       alert(error.message || "Could not load notifications.");
     } finally {
       setLoading(false);
@@ -331,6 +335,7 @@ export default function Notifications() {
       setForm(emptyForm);
       await loadNotifications();
     } catch (error: any) {
+      console.log("POST NOTIFICATION ERROR:", error);
       alert(error.message || "Could not post notification.");
     } finally {
       setPosting(false);
@@ -338,22 +343,65 @@ export default function Notifications() {
   }
 
   async function handleMarkRead(id: string) {
-    await markNotificationAsRead(id);
-    await loadNotifications();
+    try {
+      setMarkingId(id);
+      await markNotificationAsRead(id);
+      await loadNotifications();
+    } catch (error: any) {
+      console.log("MARK NOTIFICATION READ ERROR:", error);
+      alert(error.message || "Could not mark notification as read.");
+    } finally {
+      setMarkingId(null);
+    }
   }
 
   async function handleMarkAllRead() {
-    await markAllNotificationsAsRead();
-    await loadNotifications();
+    try {
+      setMarkingAll(true);
+      await markAllNotificationsAsRead();
+
+      await createAdminLog({
+        admin_id: profile?.id,
+        action: "MARK_ALL_NOTIFICATIONS_READ",
+        target_table: "notifications",
+        description: "Marked all notifications as read",
+      });
+
+      await loadNotifications();
+    } catch (error: any) {
+      console.log("MARK ALL NOTIFICATIONS READ ERROR:", error);
+      alert(error.message || "Could not mark all notifications as read.");
+    } finally {
+      setMarkingAll(false);
+    }
   }
 
-  async function handleDelete(id: string) {
-    const confirmed = confirm("Delete this notification?");
+  async function handleDelete(item: Notification) {
+    const confirmed = confirm(`Delete "${item.title}"?`);
 
     if (!confirmed) return;
 
-    await deleteNotification(id);
-    await loadNotifications();
+    try {
+      setDeletingId(item.id);
+
+      await deleteNotification(item.id);
+
+      await createAdminLog({
+        admin_id: profile?.id,
+        action: "DELETE_NOTIFICATION",
+        target_table: "notifications",
+        target_id: item.id,
+        description: `Deleted notification: ${item.title}`,
+      });
+
+      setNotifications((prev) => prev.filter((notification) => notification.id !== item.id));
+      await loadNotifications();
+    } catch (error: any) {
+      console.log("DELETE NOTIFICATION ERROR:", error);
+      alert(error.message || "Could not delete notification.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   const filteredNotifications = useMemo(() => {
@@ -404,10 +452,11 @@ export default function Notifications() {
 
         <button
           onClick={handleMarkAllRead}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange to-amber-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.02] sm:w-auto"
+          disabled={markingAll}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange to-amber-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.02] disabled:opacity-60 sm:w-auto"
         >
           <CheckCheck size={18} />
-          Mark All Read
+          {markingAll ? "Marking..." : "Mark All Read"}
         </button>
       </div>
 
@@ -671,17 +720,20 @@ export default function Notifications() {
                         {!item.is_read && (
                           <button
                             onClick={() => handleMarkRead(item.id)}
-                            className="rounded-2xl bg-orange/10 px-4 py-2 text-xs font-black text-orange transition hover:bg-orange hover:text-white"
+                            disabled={markingId === item.id}
+                            className="rounded-2xl bg-orange/10 px-4 py-2 text-xs font-black text-orange transition hover:bg-orange hover:text-white disabled:opacity-60"
                           >
-                            Mark Read
+                            {markingId === item.id ? "Marking..." : "Mark Read"}
                           </button>
                         )}
 
                         <button
-                          onClick={() => handleDelete(item.id)}
-                          className="rounded-2xl bg-red-50 px-4 py-2 text-xs font-black text-red-600 transition hover:bg-red-600 hover:text-white dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-600"
+                          onClick={() => handleDelete(item)}
+                          disabled={deletingId === item.id}
+                          className="rounded-2xl bg-red-50 px-4 py-2 text-xs font-black text-red-600 transition hover:bg-red-600 hover:text-white disabled:opacity-60 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-600"
+                          title="Delete notification"
                         >
-                          <Trash2 size={14} />
+                          {deletingId === item.id ? "Deleting..." : <Trash2 size={14} />}
                         </button>
                       </div>
                     </div>
