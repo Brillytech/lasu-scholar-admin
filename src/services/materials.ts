@@ -37,6 +37,22 @@ export type Material = {
   };
 };
 
+type MaterialPayload = {
+  course_id: string;
+  topic_id: string;
+  title: string;
+  type: MaterialType;
+  file_url: string;
+  content: string;
+  summary_1?: string;
+  video_url: string;
+  thumbnail_url: string;
+};
+
+function clean(value?: string | null) {
+  return String(value || "").trim();
+}
+
 export async function getMaterials(filters?: {
   course_ids?: string[];
   topic_ids?: string[];
@@ -93,17 +109,7 @@ export async function getMaterials(filters?: {
   return data as Material[];
 }
 
-export async function createMaterial(payload: {
-  course_id: string;
-  topic_id: string;
-  title: string;
-  type: MaterialType;
-  file_url: string;
-  content: string;
-  summary_1: string;
-  video_url: string;
-  thumbnail_url: string;
-}) {
+export async function createMaterial(payload: MaterialPayload) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -113,13 +119,13 @@ export async function createMaterial(payload: {
     .insert({
       course_id: payload.course_id,
       topic_id: payload.topic_id,
-      title: payload.title.trim(),
+      title: clean(payload.title),
       type: String(payload.type || "").toLowerCase() as MaterialType,
-      file_url: payload.file_url.trim(),
-      content: payload.content.trim(),
-      summary_1: payload.summary_1.trim(),
-      video_url: payload.video_url.trim(),
-      thumbnail_url: payload.thumbnail_url.trim(),
+      file_url: clean(payload.file_url),
+      content: clean(payload.content),
+      summary_1: clean(payload.summary_1),
+      video_url: clean(payload.video_url),
+      thumbnail_url: clean(payload.thumbnail_url),
       uploaded_by: user?.id || null,
     })
     .select()
@@ -130,31 +136,19 @@ export async function createMaterial(payload: {
   return data as Material;
 }
 
-export async function updateMaterial(
-  id: string,
-  payload: {
-    course_id: string;
-    topic_id: string;
-    title: string;
-    type: MaterialType;
-    file_url: string;
-    content: string;
-    video_url: string;
-    thumbnail_url: string;
-  }
-) {
+export async function updateMaterial(id: string, payload: MaterialPayload) {
   const { data, error } = await supabase
     .from("materials")
     .update({
       course_id: payload.course_id,
       topic_id: payload.topic_id,
-      title: payload.title.trim(),
+      title: clean(payload.title),
       type: String(payload.type || "").toLowerCase() as MaterialType,
-      file_url: payload.file_url.trim(),
-      content: payload.content.trim(),
-      summary_1: payload.summary_1.trim(),
-      video_url: payload.video_url.trim(),
-      thumbnail_url: payload.thumbnail_url.trim(),
+      file_url: clean(payload.file_url),
+      content: clean(payload.content),
+      summary_1: clean(payload.summary_1),
+      video_url: clean(payload.video_url),
+      thumbnail_url: clean(payload.thumbnail_url),
     })
     .eq("id", id)
     .select()

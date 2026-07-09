@@ -5,10 +5,10 @@ export type Topic = {
   course_id: string;
   title: string;
   description: string | null;
+  created_at: string;
   summary_1?: string | null;
   summary_2?: string | null;
   summary_3?: string | null;
-  created_at: string;
   courses?: {
     id?: string;
     code: string;
@@ -26,6 +26,16 @@ export type Topic = {
     } | null;
   };
 };
+
+type TopicPayload = {
+  course_id: string;
+  title: string;
+  description?: string | null;
+};
+
+function clean(value?: string | null) {
+  return String(value || "").trim();
+}
 
 export async function getTopics(filters?: { course_ids?: string[] }) {
   if (filters?.course_ids && filters.course_ids.length === 0) {
@@ -68,17 +78,13 @@ export async function getTopics(filters?: { course_ids?: string[] }) {
   return data as Topic[];
 }
 
-export async function createTopic(payload: {
-  course_id: string;
-  title: string;
-  description: string;
-}) {
+export async function createTopic(payload: TopicPayload) {
   const { data, error } = await supabase
     .from("topics")
     .insert({
       course_id: payload.course_id,
-      title: payload.title.trim(),
-      description: payload.description.trim(),
+      title: clean(payload.title),
+      description: clean(payload.description),
     })
     .select()
     .single();
@@ -88,23 +94,13 @@ export async function createTopic(payload: {
   return data as Topic;
 }
 
-export async function updateTopic(
-  id: string,
-  payload: {
-    course_id: string;
-    title: string;
-    description: string;
-    summary_1: string;
-    summary_2: string;
-    summary_3: string;
-  }
-) {
+export async function updateTopic(id: string, payload: TopicPayload) {
   const { data, error } = await supabase
     .from("topics")
     .update({
       course_id: payload.course_id,
-      title: payload.title.trim(),
-      description: payload.description.trim(),
+      title: clean(payload.title),
+      description: clean(payload.description),
     })
     .eq("id", id)
     .select()
