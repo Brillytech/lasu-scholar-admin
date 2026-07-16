@@ -136,6 +136,32 @@ export async function createMaterial(payload: MaterialPayload) {
   return data as Material;
 }
 
+// NEW — bulk insert, used by the Drive folder import flow
+export async function bulkCreateMaterials(payloads: MaterialPayload[]) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const rows = payloads.map((payload) => ({
+    course_id: payload.course_id,
+    topic_id: payload.topic_id,
+    title: clean(payload.title),
+    type: String(payload.type || "").toLowerCase() as MaterialType,
+    file_url: clean(payload.file_url),
+    content: clean(payload.content),
+    summary_1: clean(payload.summary_1),
+    video_url: clean(payload.video_url),
+    thumbnail_url: clean(payload.thumbnail_url),
+    uploaded_by: user?.id || null,
+  }));
+
+  const { data, error } = await supabase.from("materials").insert(rows).select();
+
+  if (error) throw error;
+
+  return data as Material[];
+}
+
 export async function updateMaterial(id: string, payload: MaterialPayload) {
   const { data, error } = await supabase
     .from("materials")

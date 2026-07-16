@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Edit3,
   FileText,
+  FolderInput,
   LinkIcon,
   Plus,
   Search,
@@ -24,11 +25,18 @@ import type { Topic } from "../services/topics";
 import { getTopics } from "../services/topics";
 import type { Material, MaterialType } from "../services/materials";
 import {
+  bulkCreateMaterials,
   createMaterial,
   deleteMaterial,
   getMaterials,
   updateMaterial,
 } from "../services/materials";
+import {
+  fileNameToTitle,
+  listDriveFolderFiles,
+  mimeTypeToMaterialType,
+  type DriveFile,
+} from "../services/driveImport";
 
 const LASU_DATA: Record<string, string[]> = {
   Arts: [
@@ -201,6 +209,16 @@ function getLevelOptions(school: string, department?: string) {
   return ["200L", "300L", "400L", "500L"];
 }
 
+// Row shape used inside the Bulk Import modal. Extends the raw Drive file
+// with per-row editable fields, including its OWN topic assignment —
+// this is what lets one folder cover several topics at once.
+type BulkRow = DriveFile & {
+  title: string;
+  type: string;
+  topic_id: string;
+  selected: boolean;
+};
+
 export default function Materials() {
   const { profile } = useAdminAuth();
   const isSuperAdmin = profile?.role === "super_admin";
@@ -226,6 +244,15 @@ export default function Materials() {
   const [expandedMaterials, setExpandedMaterials] = useState<string[]>([]);
   const [visibleCount, setVisibleCount] = useState(10);
 
+  // --- Bulk Drive import state ---
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [bulkFolderLink, setBulkFolderLink] = useState("");
+  const [bulkCourseId, setBulkCourseId] = useState("");
+  const [bulkDefaultTopicId, setBulkDefaultTopicId] = useState("");
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [bulkFiles, setBulkFiles] = useState<BulkRow[]>([]);
+
   const facultyOptions = Object.keys(LASU_DATA);
   const departmentOptions = getDepartmentOptions(context.school, context.faculty);
   const levelOptions = getLevelOptions(context.school, context.department);
@@ -248,6 +275,12 @@ export default function Materials() {
     if (!courseFilter) return topics;
     return topics.filter((topic) => topic.course_id === courseFilter);
   }, [topics, courseFilter]);
+
+  // Topics available for the course picked in the Bulk Import modal
+  const bulkTopicsForCourse = useMemo(() => {
+    if (!bulkCourseId) return [];
+    return topics.filter((topic) => topic.course_id === bulkCourseId);
+  }, [topics, bulkCourseId]);
 
   useEffect(() => {
     loadAcademicWorkspace();
@@ -579,6 +612,147 @@ export default function Materials() {
     }
   }
 
+  // --- Bulk Drive import handlers ---
+
+  function openBulkImport() {
+    if (ownedCourses.length === 0) {
+      alert("Create a course in this workspace first. Shared courses are view-only here.");
+      return;
+    }
+
+    const firstCourse = ownedCourses[0]?.id || "";
+    const firstTopic = topics.find((topic) => topic.course_id === firstCourse);
+
+    if (!firstTopic) {
+      alert("Create a topic under an owned course first.");
+      return;
+    }
+
+    setBulkFolderLink("");
+    setBulkCourseId(firstCourse);
+    setBulkDefaultTopicId(firstTopic.id);
+    setBulkFiles([]);
+    setBulkModalOpen(true);
+  }
+
+  function handleBulkCourseChange(value: string) {
+    const firstTopic = topics.find((topic) => topic.course_id === value);
+    setBulkCourseId(value);
+    setBulkDefaultTopicId(firstTopic?.id || "");
+
+    // Re-point any already-fetched rows to a valid topic under the new course
+    setBulkFiles((prev) =>
+      prev.map((file) => ({ ...file, topic_id: firstTopic?.id || "" }))
+    );
+  }
+
+  function handleBulkDefaultTopicChange(value: string) {
+    setBulkDefaultTopicId(value);
+    // Apply this default to every row that hasn't been individually overridden
+    setBulkFiles((prev) => prev.map((file) => ({ ...file, topic_id: value })));
+  }
+
+  async function handleFetchFolder() {
+    if (!bulkFolderLink.trim()) {
+      alert("Paste a Google Drive folder link first.");
+      return;
+    }
+
+    if (!bulkDefaultTopicId) {
+      alert("Pick a course/topic first so files have somewhere to default to.");
+      return;
+    }
+
+    try {
+      setBulkLoading(true);
+      const files = await listDriveFolderFiles(bulkFolderLink);
+
+      if (files.length === 0) {
+        alert("No files found in that folder (or it isn't shared publicly yet).");
+      }
+
+      setBulkFiles(
+        files.map((file) => ({
+          ...file,
+          title: fileNameToTitle(file.name),
+          type: mimeTypeToMaterialType(file.mimeType),
+          topic_id: bulkDefaultTopicId,
+          selected: true,
+        }))
+      );
+    } catch (error: any) {
+      alert(error.message || "Could not read that Drive folder.");
+    } finally {
+      setBulkLoading(false);
+    }
+  }
+
+  function updateBulkFile(id: string, patch: Partial<BulkRow>) {
+    setBulkFiles((prev) =>
+      prev.map((file) => (file.id === id ? { ...file, ...patch } : file))
+    );
+  }
+
+  function toggleAllBulkFiles(selected: boolean) {
+    setBulkFiles((prev) => prev.map((file) => ({ ...file, selected })));
+  }
+
+  async function handleBulkImport() {
+    const selectedCourse = courseById.get(bulkCourseId);
+
+    if (selectedCourse?.is_shared) {
+      alert("Shared courses are view-only here.");
+      return;
+    }
+
+    const toImport = bulkFiles.filter((file) => file.selected);
+
+    if (!bulkCourseId || toImport.length === 0) {
+      alert("Select a course and at least one file.");
+      return;
+    }
+
+    const missingTopic = toImport.find((file) => !file.topic_id);
+    if (missingTopic) {
+      alert(`"${missingTopic.title}" has no topic assigned. Assign a topic to every selected file.`);
+      return;
+    }
+
+    try {
+      setBulkImporting(true);
+
+      const payloads = toImport.map((file) => ({
+        course_id: bulkCourseId,
+        topic_id: file.topic_id,
+        title: file.title.trim() || file.name,
+        type: file.type as MaterialType,
+        file_url: file.webViewLink,
+        content: "",
+        summary_1: "",
+        video_url: file.type === "video" ? file.webViewLink : "",
+        thumbnail_url: file.thumbnailLink || "",
+      }));
+
+      const created = await bulkCreateMaterials(payloads);
+
+      await createAdminLog({
+        admin_id: profile?.id,
+        action: "BULK_CREATE_MATERIALS",
+        target_table: "materials",
+        target_id: bulkCourseId,
+        description: `Bulk imported ${created.length} materials from Drive folder`,
+      });
+
+      setBulkModalOpen(false);
+      await loadPageData();
+      alert(`Imported ${created.length} materials.`);
+    } catch (error: any) {
+      alert(error.message || "Bulk import failed.");
+    } finally {
+      setBulkImporting(false);
+    }
+  }
+
   const filteredMaterials = useMemo(() => {
     const q = search.trim().toLowerCase();
 
@@ -622,13 +796,23 @@ export default function Materials() {
           </p>
         </div>
 
-        <button
-          onClick={openCreateMaterial}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange to-amber-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.02] sm:w-auto"
-        >
-          <Plus size={18} />
-          Add Material
-        </button>
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+          <button
+            onClick={openBulkImport}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-navy px-5 py-3 text-sm font-black text-white shadow-lg transition hover:scale-[1.02] sm:w-auto dark:bg-white/10"
+          >
+            <FolderInput size={18} />
+            Bulk Import from Drive
+          </button>
+
+          <button
+            onClick={openCreateMaterial}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange to-amber-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.02] sm:w-auto"
+          >
+            <Plus size={18} />
+            Add Material
+          </button>
+        </div>
       </div>
 
       <div className="mb-6 rounded-[32px] border border-orange/10 bg-white/85 p-5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/10">
@@ -1098,6 +1282,155 @@ export default function Materials() {
           </div>
         </div>
       )}
+
+      {bulkModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-navy/60 px-4 py-8 backdrop-blur-sm">
+          <div className="mx-auto w-full max-w-3xl rounded-[30px] border border-orange/10 bg-white/95 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/95">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-orange">
+                  Bulk Import
+                </p>
+                <h3 className="mt-2 text-2xl font-black text-navy dark:text-white">
+                  Import from Drive Folder
+                </h3>
+                <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-300">
+                  Folder must be shared "Anyone with the link — Viewer". Each file gets its own
+                  topic below, so one folder can cover several topics.
+                </p>
+              </div>
+              <button
+                onClick={() => setBulkModalOpen(false)}
+                className="grid h-10 w-10 place-items-center rounded-2xl bg-soft text-navy transition hover:bg-orange hover:text-white dark:bg-white/10 dark:text-white"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <SearchableSelect
+                label="Course"
+                value={bulkCourseId}
+                onChange={handleBulkCourseChange}
+                placeholder="Select course"
+                searchPlaceholder="Search courses..."
+                emptyMessage="No owned course found"
+                clearable={false}
+                options={ownedCourses.map((course) => ({
+                  label: `${course.code} - ${course.title}`,
+                  value: course.id,
+                }))}
+              />
+
+              <SearchableSelect
+                label="Default Topic (applies to all rows, editable per file below)"
+                value={bulkDefaultTopicId}
+                onChange={handleBulkDefaultTopicChange}
+                placeholder={bulkCourseId ? "Select default topic" : "Select course first"}
+                searchPlaceholder="Search topics..."
+                emptyMessage="No topic found under this course"
+                disabled={!bulkCourseId}
+                clearable={false}
+                options={bulkTopicsForCourse.map((topic) => ({
+                  label: topic.title,
+                  value: topic.id,
+                }))}
+              />
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <input
+                value={bulkFolderLink}
+                onChange={(e) => setBulkFolderLink(e.target.value)}
+                placeholder="Paste Google Drive folder link"
+                className="h-12 flex-1 rounded-2xl border border-orange/10 bg-soft px-4 text-sm font-bold text-navy outline-none transition focus:border-orange dark:border-white/10 dark:bg-white/10 dark:text-white"
+              />
+              <button
+                onClick={handleFetchFolder}
+                disabled={bulkLoading}
+                className="rounded-2xl bg-orange px-5 py-3 text-sm font-black text-white transition hover:scale-[1.02] disabled:opacity-60"
+              >
+                {bulkLoading ? "Fetching..." : "Fetch Files"}
+              </button>
+            </div>
+
+            {bulkFiles.length > 0 && (
+              <div className="mt-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-orange">
+                    {bulkFiles.filter((f) => f.selected).length} of {bulkFiles.length} selected
+                  </p>
+                  <div className="flex gap-2">
+                    <button onClick={() => toggleAllBulkFiles(true)} className="text-xs font-black text-orange">
+                      Select All
+                    </button>
+                    <button onClick={() => toggleAllBulkFiles(false)} className="text-xs font-black text-slate-400">
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <div className="max-h-96 space-y-2 overflow-y-auto rounded-2xl bg-soft p-3 dark:bg-slate-950/40">
+                  {bulkFiles.map((file) => (
+                    <div
+                      key={file.id}
+                      className="grid grid-cols-1 gap-2 rounded-xl bg-white/80 p-3 sm:grid-cols-[auto_1.3fr_0.7fr_0.9fr] sm:items-center dark:bg-white/5"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={file.selected}
+                        onChange={(e) => updateBulkFile(file.id, { selected: e.target.checked })}
+                        className="h-4 w-4"
+                      />
+
+                      <input
+                        value={file.title}
+                        onChange={(e) => updateBulkFile(file.id, { title: e.target.value })}
+                        className="h-9 w-full rounded-lg border border-orange/10 bg-transparent px-2 text-sm font-bold text-navy outline-none dark:text-white"
+                      />
+
+                      <select
+                        value={file.type}
+                        onChange={(e) => updateBulkFile(file.id, { type: e.target.value })}
+                        className="h-9 rounded-lg border border-orange/10 bg-transparent px-2 text-xs font-black text-navy outline-none dark:text-white"
+                      >
+                        {["pdf", "video", "note", "image", "link"].map((t) => (
+                          <option key={t} value={t}>
+                            {t.toUpperCase()}
+                          </option>
+                        ))}
+                      </select>
+
+                      <select
+                        value={file.topic_id}
+                        onChange={(e) => updateBulkFile(file.id, { topic_id: e.target.value })}
+                        className="h-9 rounded-lg border border-orange/10 bg-transparent px-2 text-xs font-bold text-navy outline-none dark:text-white"
+                      >
+                        <option value="">Select topic...</option>
+                        {bulkTopicsForCourse.map((topic) => (
+                          <option key={topic.id} value={topic.id}>
+                            {topic.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={handleBulkImport}
+                  disabled={bulkImporting}
+                  className="mt-5 w-full rounded-2xl bg-gradient-to-r from-orange to-amber-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.01] disabled:opacity-60"
+                >
+                  {bulkImporting
+                    ? "Importing..."
+                    : `Import ${bulkFiles.filter((f) => f.selected).length} Materials`}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1222,4 +1555,3 @@ function SelectRaw({
     </label>
   );
 }
-
