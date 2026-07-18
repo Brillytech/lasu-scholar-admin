@@ -1,49 +1,146 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
+  Archive,
   Atom,
+  Award,
+  Baby,
+  Backpack,
+  Banknote,
   BarChart3,
   Beaker,
+  Binary,
+  Bird,
+  Bone,
+  BookMarked,
   BookOpen,
+  BookOpenCheck,
+  BookText,
+  Box,
   Brain,
   Briefcase,
   Bug,
+  Building,
+  Building2,
   Calculator,
+  Camera,
+  Cat,
   CheckCircle2,
+  ChevronDown,
+  Church,
   CircuitBoard,
+  Clapperboard,
+  ClipboardList,
+  Cloud,
   Code2,
   Cog,
+  Compass,
+  Component,
+  Construction,
   Cpu,
+  CreditCard,
+  Crown,
   Database,
   Dna,
+  Dog,
+  DraftingCompass,
+  Droplet,
   Edit3,
+  Factory,
+  FileCheck,
   FileText,
+  Fish,
+  Flag,
   FlaskConical,
+  Folder,
+  Gavel,
+  Gem,
+  Globe,
   GraduationCap,
+  Hammer,
+  Handshake,
+  HardHat,
+  HeartHandshake,
   HeartPulse,
+  Headphones,
+  Home,
   Hospital,
   Landmark,
   Languages,
+  Layers,
   Layers3,
   Leaf,
   Library,
+  Lightbulb,
+  Map,
+  MapPin,
+  MapPinned,
+  Megaphone,
+  MessageSquare,
+  Mic,
   Microscope,
+  MonitorPlay,
+  Moon,
+  Mountain,
   Music,
+  Network,
+  Newspaper,
   NotebookPen,
+  Orbit,
+  Package,
+  Paintbrush,
+  PawPrint,
   PenTool,
+  PieChart,
+  PiggyBank,
   Pill,
+  Plane,
   Plus,
+  Presentation,
+  Quote,
+  Radiation,
+  Radio,
+  Recycle,
+  Rocket,
+  Route,
+  Ruler,
+  Satellite,
   Scale,
+  ScanLine,
+  School,
   Search,
+  Server,
   Share2,
+  ShieldCheck,
   ShieldPlus,
+  Ship,
+  Signpost,
   SlidersHorizontal,
+  Sparkles,
+  Sprout,
+  Star,
   Stethoscope,
+  Sun,
   Syringe,
+  Target,
+  Telescope,
+  Terminal,
   TestTube,
   Theater,
+  Thermometer,
+  Tractor,
   Trash2,
+  TreePine,
+  TrendingUp,
+  Trophy,
+  Truck,
+  Tv,
   Users,
+  Vote,
+  Waves,
+  Wheat,
+  Wifi,
+  Wind,
   Wrench,
   X,
   Zap,
@@ -227,59 +324,258 @@ const emptyShareForm = {
   academic_period_id: "",
 };
 
-const COURSE_ICONS = [
-  { label: "Book", value: "book", icon: BookOpen },
-  { label: "Notebook", value: "notebook", icon: NotebookPen },
-  { label: "Library", value: "library", icon: Library },
-  { label: "Graduation", value: "graduation", icon: GraduationCap },
-  { label: "Document", value: "document", icon: FileText },
-
-  { label: "Stethoscope", value: "stethoscope", icon: Stethoscope },
-  { label: "Nursing", value: "nursing", icon: Stethoscope },
-  { label: "Medicine", value: "medicine", icon: Hospital },
-  { label: "Clinical", value: "clinical", icon: Activity },
-  { label: "Anatomy", value: "anatomy", icon: HeartPulse },
-  { label: "Heart", value: "heart", icon: HeartPulse },
-  { label: "Brain", value: "brain", icon: Brain },
-  { label: "Biology", value: "biology", icon: Dna },
-  { label: "DNA", value: "dna", icon: Dna },
-  { label: "Microscope", value: "microscope", icon: Microscope },
-  { label: "Laboratory", value: "lab", icon: Microscope },
-  { label: "Pharmacy", value: "pharmacy", icon: Pill },
-  { label: "Pill", value: "pill", icon: Pill },
-  { label: "Injection", value: "injection", icon: Syringe },
-  { label: "Dentistry", value: "dentistry", icon: ShieldPlus },
-
-  { label: "Chemistry", value: "chemistry", icon: FlaskConical },
-  { label: "Flask", value: "flask", icon: FlaskConical },
-  { label: "Test Tube", value: "test-tube", icon: TestTube },
-  { label: "Beaker", value: "beaker", icon: Beaker },
-  { label: "Atom", value: "atom", icon: Atom },
-  { label: "Plant", value: "plant", icon: Leaf },
-  { label: "Microbiology", value: "microbiology", icon: Bug },
-
-  { label: "Maths", value: "math", icon: Calculator },
-  { label: "Statistics", value: "statistics", icon: BarChart3 },
-  { label: "Research", value: "research", icon: BarChart3 },
-
-  { label: "Electricity", value: "bolt", icon: Zap },
-  { label: "CPU", value: "cpu", icon: Cpu },
-  { label: "Code", value: "code", icon: Code2 },
-  { label: "Database", value: "database", icon: Database },
-  { label: "Circuit", value: "circuit", icon: CircuitBoard },
-  { label: "Engineering", value: "engineering", icon: Wrench },
-  { label: "Technology", value: "technology", icon: Cog },
-
-  { label: "Business", value: "business", icon: Briefcase },
-  { label: "Economics", value: "economics", icon: Landmark },
-  { label: "Management", value: "management", icon: Users },
-
-  { label: "Law", value: "law", icon: Scale },
-  { label: "Language", value: "language", icon: Languages },
-  { label: "Music", value: "music", icon: Music },
-  { label: "Theatre", value: "theatre", icon: Theater },
-  { label: "Writing", value: "writing", icon: PenTool },
+// Icons grouped by faculty/subject area so the picker can show them
+// organized instead of one long flat list. Some icons repeat across
+// categories on purpose (a shape can fit more than one subject) —
+// that's fine, each entry still has its own unique `value`.
+const COURSE_ICON_GROUPS: {
+  category: string;
+  icons: { label: string; value: string; icon: any }[];
+}[] = [
+  {
+    category: "General",
+    icons: [
+      { label: "Book", value: "book", icon: BookOpen },
+      { label: "Notebook", value: "notebook", icon: NotebookPen },
+      { label: "Library", value: "library", icon: Library },
+      { label: "Graduation", value: "graduation", icon: GraduationCap },
+      { label: "Document", value: "document", icon: FileText },
+      { label: "Presentation", value: "presentation", icon: Presentation },
+      { label: "Ideas / Concepts", value: "ideas", icon: Lightbulb },
+      { label: "Goals", value: "goals", icon: Target },
+      { label: "Award", value: "award", icon: Award },
+      { label: "Trophy", value: "trophy", icon: Trophy },
+      { label: "Star / Featured", value: "star", icon: Star },
+      { label: "Highlights", value: "highlights", icon: Sparkles },
+      { label: "Modules", value: "modules", icon: Component },
+      { label: "Resources", value: "resources", icon: Box },
+      { label: "Layers / Levels", value: "layers", icon: Layers },
+      { label: "Folder", value: "folder", icon: Folder },
+      { label: "Checklist", value: "checklist", icon: ClipboardList },
+      { label: "Verified Content", value: "verified", icon: FileCheck },
+      { label: "Approved Reading", value: "approved-reading", icon: BookOpenCheck },
+    ],
+  },
+  {
+    category: "Medicine & Health Sciences",
+    icons: [
+      { label: "Stethoscope", value: "stethoscope", icon: Stethoscope },
+      { label: "Nursing", value: "nursing", icon: Stethoscope },
+      { label: "Care Therapy", value: "care-therapy", icon: HeartHandshake },
+      { label: "Medicine", value: "medicine", icon: Hospital },
+      { label: "Clinical", value: "clinical", icon: Activity },
+      { label: "Anatomy", value: "anatomy", icon: HeartPulse },
+      { label: "Organs", value: "organs", icon: HeartPulse },
+      { label: "Physiology", value: "physiology", icon: Bone },
+      { label: "Heart", value: "heart", icon: HeartPulse },
+      { label: "Genetics", value: "genetics", icon: Dna },
+      { label: "Biochemistry", value: "biochemistry", icon: FlaskConical },
+      { label: "Pharmacy", value: "pharmacy", icon: Pill },
+      { label: "Pharmacology", value: "pharmacology", icon: Pill },
+      { label: "Pill", value: "pill", icon: Pill },
+      { label: "Injection", value: "injection", icon: Syringe },
+      { label: "Dentistry", value: "dentistry", icon: ShieldPlus },
+      { label: "Radiography", value: "radiography", icon: Radiation },
+      { label: "Scan", value: "scan", icon: ScanLine },
+      { label: "Physiotherapy", value: "physiotherapy", icon: Waves },
+      { label: "Pediatrics / Midwifery", value: "pediatrics", icon: Baby },
+      { label: "Public Health", value: "public-health", icon: ShieldCheck },
+      { label: "Vitals / Diagnostics", value: "vitals", icon: Thermometer },
+    ],
+  },
+  {
+    category: "Science",
+    icons: [
+      { label: "Biology", value: "biology", icon: Dna },
+      { label: "DNA", value: "dna", icon: Dna },
+      { label: "Zoology", value: "zoology", icon: PawPrint },
+      { label: "Botany", value: "botany", icon: Sprout },
+      { label: "Plant", value: "plant", icon: Leaf },
+      { label: "Microbiology", value: "microbiology", icon: Bug },
+      { label: "Microscope", value: "microscope", icon: Microscope },
+      { label: "Laboratory", value: "lab", icon: Microscope },
+      { label: "Chemistry", value: "chemistry", icon: FlaskConical },
+      { label: "Flask", value: "flask", icon: FlaskConical },
+      { label: "Test Tube", value: "test-tube", icon: TestTube },
+      { label: "Beaker", value: "beaker", icon: Beaker },
+      { label: "Atom", value: "atom", icon: Atom },
+      { label: "Physics", value: "physics", icon: Atom },
+      { label: "Fisheries", value: "fisheries", icon: Fish },
+      { label: "Mathematics", value: "math", icon: Calculator },
+      { label: "Statistics", value: "statistics", icon: PieChart },
+      { label: "Research", value: "research", icon: BarChart3 },
+      { label: "Astronomy", value: "astronomy", icon: Telescope },
+      { label: "Space Science", value: "space-science", icon: Satellite },
+      { label: "Orbital Mechanics", value: "orbital", icon: Orbit },
+      { label: "Solar / Energy", value: "solar", icon: Sun },
+      { label: "Meteorology", value: "meteorology", icon: Cloud },
+      { label: "Climate Science", value: "climate", icon: Wind },
+      { label: "Hydrology", value: "hydrology", icon: Droplet },
+      { label: "Sustainability", value: "sustainability", icon: Recycle },
+    ],
+  },
+  {
+    category: "Engineering & Technology",
+    icons: [
+      { label: "Engineering", value: "engineering", icon: Wrench },
+      { label: "Mechanical", value: "mechanical", icon: Cog },
+      { label: "Electrical / Electronics", value: "bolt", icon: Zap },
+      { label: "Circuit", value: "circuit", icon: CircuitBoard },
+      { label: "CPU", value: "cpu", icon: Cpu },
+      { label: "Civil / Construction", value: "construction", icon: Construction },
+      { label: "Industrial", value: "industrial", icon: HardHat },
+      { label: "Aeronautics", value: "aeronautics", icon: Plane },
+      { label: "Astronautics", value: "astronautics", icon: Rocket },
+      { label: "Drafting", value: "drafting", icon: DraftingCompass },
+      { label: "Measurement", value: "ruler", icon: Ruler },
+      { label: "Building / Construction", value: "hammer", icon: Hammer },
+      { label: "Industrial Engineering", value: "industrial-eng", icon: Factory },
+    ],
+  },
+  {
+    category: "Computing & IT",
+    icons: [
+      { label: "Code", value: "code", icon: Code2 },
+      { label: "Database", value: "database", icon: Database },
+      { label: "Server", value: "server", icon: Server },
+      { label: "Terminal", value: "terminal", icon: Terminal },
+      { label: "Binary", value: "binary", icon: Binary },
+      { label: "Network / ICT", value: "wifi", icon: Wifi },
+      { label: "Cyber Security", value: "cyber-security", icon: ShieldCheck },
+    ],
+  },
+  {
+    category: "Environmental Sciences & Design",
+    icons: [
+      { label: "Architecture", value: "architecture", icon: Building2 },
+      { label: "Building", value: "building", icon: Building2 },
+      { label: "Estate Management", value: "estate", icon: Home },
+      { label: "Urban Planning", value: "urban-planning", icon: MapPin },
+      { label: "Survey / Geo-Informatics", value: "survey", icon: Compass },
+      { label: "Quantity Surveying", value: "quantity-surveying", icon: Ruler },
+      { label: "Fine Arts", value: "fine-arts", icon: Paintbrush },
+      { label: "Industrial Design", value: "industrial-design", icon: Gem },
+      { label: "Environmental Mgmt", value: "environment", icon: TreePine },
+      { label: "Terrain / Land Use", value: "terrain", icon: Mountain },
+      { label: "Buildings", value: "buildings", icon: Building },
+      { label: "Routes / Roads", value: "routes", icon: Route },
+      { label: "Wayfinding", value: "wayfinding", icon: Signpost },
+      { label: "Location Planning", value: "location-planning", icon: MapPinned },
+    ],
+  },
+  {
+    category: "Social Sciences & Humanities",
+    icons: [
+      { label: "Psychology", value: "psychology", icon: Brain },
+      { label: "Sociology", value: "sociology", icon: Users },
+      { label: "Political Science", value: "political-science", icon: Vote },
+      { label: "Geography", value: "geography", icon: Map },
+      { label: "Economics", value: "economics", icon: Landmark },
+      { label: "History", value: "history", icon: Landmark },
+      { label: "Philosophy", value: "philosophy", icon: Quote },
+      { label: "Language", value: "language", icon: Languages },
+      { label: "Literature / Writing", value: "writing", icon: PenTool },
+      { label: "Theatre", value: "theatre", icon: Theater },
+      { label: "Music", value: "music", icon: Music },
+      { label: "Peace Studies", value: "peace-studies", icon: HeartHandshake },
+      { label: "International Studies", value: "international", icon: Globe },
+      { label: "Religious Studies", value: "religious-studies", icon: BookOpen },
+      { label: "Christian Religious Studies", value: "crs", icon: Church },
+      { label: "Islamic Studies", value: "islamic-studies", icon: Moon },
+      { label: "Linguistics", value: "linguistics", icon: MessageSquare },
+      { label: "Arabic / World Languages", value: "arabic", icon: BookText },
+      { label: "French / Portuguese / Yoruba", value: "world-language", icon: Flag },
+      { label: "Monarchy / Heritage", value: "heritage", icon: Crown },
+    ],
+  },
+  {
+    category: "Communication & Media Studies",
+    icons: [
+      { label: "Mass Communication", value: "mass-comm", icon: Mic },
+      { label: "Broadcasting", value: "broadcasting", icon: Radio },
+      { label: "Journalism", value: "journalism", icon: Newspaper },
+      { label: "Film / Video", value: "film", icon: Camera },
+      { label: "Photography", value: "photography", icon: Camera },
+      { label: "Production", value: "production", icon: Clapperboard },
+      { label: "Audio", value: "audio", icon: Headphones },
+      { label: "Television", value: "television", icon: Tv },
+      { label: "Streaming", value: "streaming", icon: MonitorPlay },
+      { label: "Public Relations", value: "pr", icon: Megaphone },
+      { label: "Broadcast Network", value: "broadcast-network", icon: Network },
+    ],
+  },
+  {
+    category: "Management & Business",
+    icons: [
+      { label: "Business", value: "business", icon: Briefcase },
+      { label: "Management", value: "management", icon: Users },
+      { label: "Accounting", value: "accounting", icon: Calculator },
+      { label: "Banking & Finance", value: "banking", icon: Landmark },
+      { label: "Marketing", value: "marketing", icon: TrendingUp },
+      { label: "Insurance", value: "insurance", icon: ShieldCheck },
+      { label: "HR / Industrial Relations", value: "hr", icon: Handshake },
+      { label: "Public Administration", value: "public-admin", icon: Users },
+      { label: "Local Govt. Administration", value: "local-govt", icon: Landmark },
+      { label: "Taxation", value: "taxation", icon: Banknote },
+      { label: "Investment", value: "investment", icon: PieChart },
+      { label: "Savings", value: "savings", icon: PiggyBank },
+      { label: "Payments", value: "payments", icon: CreditCard },
+    ],
+  },
+  {
+    category: "Law",
+    icons: [
+      { label: "Law", value: "law", icon: Scale },
+      { label: "Gavel / Judiciary", value: "gavel", icon: Gavel },
+    ],
+  },
+  {
+    category: "Agriculture",
+    icons: [
+      { label: "Crop Production", value: "crop-production", icon: Sprout },
+      { label: "Animal Science", value: "animal-science", icon: PawPrint },
+      { label: "Agric. Economics", value: "agric-economics", icon: Wheat },
+      { label: "Extension & Rural Dev.", value: "extension", icon: Tractor },
+      { label: "Plant Science", value: "plant-science", icon: Leaf },
+      { label: "Fisheries & Aquatic", value: "fisheries-aquatic", icon: Fish },
+      { label: "Livestock", value: "livestock", icon: Bird },
+      { label: "Veterinary / Animal Care", value: "veterinary", icon: Cat },
+      { label: "Animal Husbandry", value: "husbandry", icon: Dog },
+    ],
+  },
+  {
+    category: "Library & Information Science",
+    icons: [
+      { label: "Library Science", value: "library-science", icon: Library },
+      { label: "Archives", value: "archives", icon: Archive },
+      { label: "Cataloguing", value: "cataloguing", icon: BookMarked },
+    ],
+  },
+  {
+    category: "Transport & Logistics",
+    icons: [
+      { label: "Transport Mgmt", value: "transport", icon: Truck },
+      { label: "Logistics", value: "logistics", icon: Package },
+      { label: "Shipping", value: "shipping", icon: Ship },
+      { label: "Aviation", value: "aviation", icon: Plane },
+    ],
+  },
+  {
+    category: "Education",
+    icons: [
+      { label: "Teacher Education", value: "teacher-education", icon: School },
+      { label: "Early Childhood", value: "early-childhood", icon: Backpack },
+      { label: "Guidance & Counselling", value: "guidance", icon: HeartHandshake },
+      { label: "Special Education", value: "special-education", icon: Users },
+      { label: "Educational Mgmt", value: "edu-management", icon: Presentation },
+    ],
+  },
 ];
+
+// Flattened for the places that just need a plain lookup by value
+// (course card badges, the details panel, alias resolution) — these
+// don't need to know about categories, just label + icon.
+const COURSE_ICONS = COURSE_ICON_GROUPS.flatMap((group) => group.icons);
 
 const COURSE_COLORS = [
   { label: "Orange", value: "orange", bg: "#fff2df", fg: "#f97316", border: "#fed7aa" },
@@ -1219,7 +1515,14 @@ export default function Courses() {
                               <p>Original Department: {course.source_department || "Not set"}</p>
                             )}
                             <p>Level: {course.level || "Not set"}</p>
-                            <p>Icon: {COURSE_ICONS.find((item) => item.value === course.course_icon)?.label || "Book"}</p>
+                            <p className="flex items-center gap-2">
+                              Icon:
+                              {(() => {
+                                const IconGlyph = getCourseIcon(course.course_icon);
+                                return <IconGlyph size={15} className="text-orange" />;
+                              })()}
+                              {COURSE_ICONS.find((item) => item.value === course.course_icon)?.label || "Book"}
+                            </p>
                             <p>Color: {COURSE_COLORS.find((item) => item.value === course.course_color)?.label || "Orange"}</p>
                             <p>Status: {course.status || "active"}</p>
                           </div>
@@ -1362,16 +1665,13 @@ export default function Courses() {
                 options={["active", "inactive"]}
               />
 
-              <Select
+              <IconPickerField
                 label="Course Icon"
                 value={courseForm.course_icon}
                 onChange={(value: string) =>
                   setCourseForm((prev) => ({ ...prev, course_icon: value }))
                 }
-                options={COURSE_ICONS.map((item) => item.value)}
-                labels={Object.fromEntries(
-                  COURSE_ICONS.map((item) => [item.value, item.label])
-                )}
+                groups={COURSE_ICON_GROUPS}
               />
 
               <Select
@@ -1684,6 +1984,137 @@ function Input({ label, value, onChange }: any) {
         className="h-12 w-full rounded-2xl border border-orange/10 bg-soft px-4 text-sm font-bold text-navy outline-none transition focus:border-orange dark:border-white/10 dark:bg-white/10 dark:text-white"
       />
     </label>
+  );
+}
+
+function IconPickerField({
+  label,
+  value,
+  onChange,
+  groups,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  groups: { category: string; icons: { label: string; value: string; icon: any }[] }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  const flat = useMemo(() => groups.flatMap((group) => group.icons), [groups]);
+  const selected = flat.find((item) => item.value === value) || flat[0];
+  const SelectedIcon = selected?.icon || BookOpen;
+
+  const filteredGroups = useMemo(() => {
+    const q = query.trim().toLowerCase();
+
+    if (!q) return groups;
+
+    return groups
+      .map((group) => ({
+        ...group,
+        icons: group.icons.filter((item) => item.label.toLowerCase().includes(q)),
+      }))
+      .filter((group) => group.icons.length > 0);
+  }, [groups, query]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      if (wrapRef.current?.contains(event.target as Node)) return;
+      setOpen(false);
+      setQuery("");
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [open]);
+
+  return (
+    <div className="relative block" ref={wrapRef}>
+      <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-300">
+        {label}
+      </span>
+
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex h-12 w-full items-center gap-3 rounded-2xl border border-orange/10 bg-soft px-4 text-left text-sm font-bold text-navy outline-none transition hover:border-orange/40 focus:border-orange dark:border-white/10 dark:bg-white/10 dark:text-white"
+      >
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-orange/10 text-orange">
+          <SelectedIcon size={17} />
+        </span>
+        <span className="min-w-0 flex-1 truncate">
+          {selected?.label || "Select icon"}
+        </span>
+        <ChevronDown
+          size={16}
+          className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-2 w-full min-w-[280px] max-w-[420px] overflow-hidden rounded-3xl border border-orange/10 bg-white/95 shadow-2xl shadow-navy/20 backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/95">
+          <div className="flex h-12 items-center gap-2 border-b border-orange/10 px-4 dark:border-white/10">
+            <Search size={16} className="text-slate-400" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search icons..."
+              className="w-full bg-transparent text-sm font-bold text-navy outline-none placeholder:text-slate-400 dark:text-white"
+            />
+          </div>
+
+          <div className="max-h-80 overflow-y-auto p-3">
+            {filteredGroups.length === 0 ? (
+              <div className="px-4 py-6 text-center text-sm font-bold text-slate-400">
+                No icons found
+              </div>
+            ) : (
+              filteredGroups.map((group) => (
+                <div key={group.category} className="mb-4 last:mb-0">
+                  <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-[0.14em] text-orange">
+                    {group.category}
+                  </p>
+                  <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+                    {group.icons.map((item) => {
+                      const ItemIcon = item.icon;
+                      const active = item.value === value;
+
+                      return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          title={item.label}
+                          onClick={() => {
+                            onChange(item.value);
+                            setOpen(false);
+                            setQuery("");
+                          }}
+                          className={`flex flex-col items-center gap-1 rounded-2xl border p-2 text-center transition ${
+                            active
+                              ? "border-orange bg-orange text-white"
+                              : "border-transparent bg-soft text-navy hover:border-orange/40 hover:text-orange dark:bg-white/10 dark:text-white"
+                          }`}
+                        >
+                          <ItemIcon size={18} />
+                          <span className="line-clamp-1 text-[9px] font-bold leading-tight">
+                            {item.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
