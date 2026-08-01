@@ -259,7 +259,10 @@ export default function Questions() {
   const workspacePeriod = periods.find((item) => item.id === workspacePeriodId) || null;
   const periodType = getAcademicPeriodType(context.department);
 
-  const ownedCourses = courses.filter((course) => !course.is_shared);
+  // Questions can now be added/edited/deleted from any department that has
+  // access to a course — whether it originally created the course or the
+  // course was shared into their workspace.
+  const ownedCourses = courses;
   const courseById = useMemo(() => {
     return new Map(courses.map((course) => [course.id, course]));
   }, [courses]);
@@ -457,35 +460,33 @@ export default function Questions() {
 
   function openCreateQuestion() {
     if (ownedCourses.length === 0) {
-      alert("Create a course in this workspace first. Shared courses are view-only here.");
+      alert("Create a course in this workspace first.");
       return;
     }
 
-    const firstCourse = ownedCourses[0]?.id || "";
-    const firstTopic = topics.find((topic) => topic.course_id === firstCourse);
+    const firstCourseWithTopic = ownedCourses.find((course) =>
+      topics.some((topic) => topic.course_id === course.id)
+    );
 
-    if (!firstTopic) {
-      alert("Create a topic under an owned course first.");
+    if (!firstCourseWithTopic) {
+      alert("Create a topic under a course first.");
       return;
     }
+
+    const firstTopic = topics.find(
+      (topic) => topic.course_id === firstCourseWithTopic.id
+    );
 
     setEditingQuestion(null);
     setQuestionForm({
       ...emptyQuestionForm,
-      course_id: firstCourse,
+      course_id: firstCourseWithTopic.id,
       topic_id: firstTopic?.id || "",
     });
     setQuestionModalOpen(true);
   }
 
   function openEditQuestion(item: Question) {
-    const course = courseById.get(item.course_id);
-
-    if (course?.is_shared) {
-      alert("This question belongs to a shared course. Edit it from the original department workspace.");
-      return;
-    }
-
     setEditingQuestion(item);
     setQuestionForm({
       course_id: item.course_id || "",
@@ -524,13 +525,6 @@ export default function Questions() {
       !questionForm.correct_answer.trim()
     ) {
       alert("Please fill the course, topic, question, options A-D and correct answer.");
-      return;
-    }
-
-    const selectedCourse = courseById.get(questionForm.course_id);
-
-    if (selectedCourse?.is_shared) {
-      alert("Shared courses are view-only here. Add questions from the original department workspace.");
       return;
     }
 
@@ -584,13 +578,6 @@ export default function Questions() {
   async function handleDeleteQuestion(item: Question) {
     if (!isSuperAdmin) {
       alert("Only super admins can delete questions.");
-      return;
-    }
-
-    const course = courseById.get(item.course_id);
-
-    if (course?.is_shared) {
-      alert("This question belongs to a shared course. Delete it from the original department workspace.");
       return;
     }
 
@@ -1124,17 +1111,15 @@ export default function Questions() {
                   )}
 
                   <div className="mt-5 flex flex-wrap gap-2">
-                    {!isShared && (
-                      <button
-                        onClick={() => openEditQuestion(item)}
-                        className="inline-flex items-center gap-2 rounded-2xl bg-soft px-4 py-2 text-xs font-black text-navy transition hover:bg-orange hover:text-white dark:bg-slate-950/50 dark:text-white dark:hover:bg-orange"
-                      >
-                        <Edit3 size={14} />
-                        Edit
-                      </button>
-                    )}
+                    <button
+                      onClick={() => openEditQuestion(item)}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-soft px-4 py-2 text-xs font-black text-navy transition hover:bg-orange hover:text-white dark:bg-slate-950/50 dark:text-white dark:hover:bg-orange"
+                    >
+                      <Edit3 size={14} />
+                      Edit
+                    </button>
 
-                    {isSuperAdmin && !isShared && (
+                    {isSuperAdmin && (
                       <button
                         onClick={() => handleDeleteQuestion(item)}
                         className="inline-flex items-center gap-2 rounded-2xl bg-red-50 px-4 py-2 text-xs font-black text-red-600 transition hover:bg-red-600 hover:text-white dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-600"
@@ -1142,12 +1127,6 @@ export default function Questions() {
                         <Trash2 size={14} />
                         Delete
                       </button>
-                    )}
-
-                    {isShared && (
-                      <span className="rounded-2xl bg-blue-500/10 px-4 py-2 text-xs font-black text-blue-600 dark:text-blue-300">
-                        View-only from original department
-                      </span>
                     )}
                   </div>
                 </div>

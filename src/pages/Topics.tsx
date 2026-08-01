@@ -218,7 +218,10 @@ export default function Topics() {
   const workspacePeriod = periods.find((item) => item.id === workspacePeriodId) || null;
   const periodType = getAcademicPeriodType(context.department);
 
-  const ownedCourses = courses.filter((course) => !course.is_shared);
+  // Topics can now be added/edited/deleted from any department that has
+  // access to a course — whether it originally created the course or the
+  // course was shared into their workspace.
+  const ownedCourses = courses;
   const courseById = useMemo(() => {
     return new Map(courses.map((course) => [course.id, course]));
   }, [courses]);
@@ -397,13 +400,6 @@ export default function Topics() {
   }
 
   function openEditTopic(topic: Topic) {
-    const course = courseById.get(topic.course_id);
-
-    if (course?.is_shared) {
-      alert("This topic belongs to a shared course. Edit it from the original department workspace.");
-      return;
-    }
-
     setEditingTopic(topic);
     setTopicForm({
       course_id: topic.course_id || "",
@@ -416,13 +412,6 @@ export default function Topics() {
   async function handleSaveTopic() {
     if (!topicForm.course_id || !topicForm.title.trim()) {
       alert("Please select a course and enter topic title.");
-      return;
-    }
-
-    const selectedCourse = courseById.get(topicForm.course_id);
-
-    if (selectedCourse?.is_shared) {
-      alert("Shared courses are view-only here. Add topics from the original department workspace.");
       return;
     }
 
@@ -451,13 +440,6 @@ export default function Topics() {
   }
 
   async function handleDeleteTopic(topic: Topic) {
-    const course = courseById.get(topic.course_id);
-
-    if (course?.is_shared) {
-      alert("This topic belongs to a shared course. Remove it from the original department workspace.");
-      return;
-    }
-
     const confirmed = confirm(
       `Delete "${topic.title}"? This may affect questions and materials under this topic.`
     );
@@ -706,31 +688,21 @@ export default function Topics() {
                   </p>
 
                   <div className="mt-5 flex flex-wrap gap-2">
-                    {!isShared && (
-                      <button
-                        onClick={() => openEditTopic(topic)}
-                        className="inline-flex items-center gap-2 rounded-2xl bg-soft px-4 py-2 text-xs font-black text-navy transition hover:bg-orange hover:text-white dark:bg-slate-950/50 dark:text-white dark:hover:bg-orange"
-                      >
-                        <Edit3 size={14} />
-                        Edit
-                      </button>
-                    )}
+                    <button
+                      onClick={() => openEditTopic(topic)}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-soft px-4 py-2 text-xs font-black text-navy transition hover:bg-orange hover:text-white dark:bg-slate-950/50 dark:text-white dark:hover:bg-orange"
+                    >
+                      <Edit3 size={14} />
+                      Edit
+                    </button>
 
-                    {!isShared && (
-                      <button
-                        onClick={() => handleDeleteTopic(topic)}
-                        className="inline-flex items-center gap-2 rounded-2xl bg-red-50 px-4 py-2 text-xs font-black text-red-600 transition hover:bg-red-600 hover:text-white dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-600"
-                      >
-                        <Trash2 size={14} />
-                        Delete
-                      </button>
-                    )}
-
-                    {isShared && (
-                      <span className="rounded-2xl bg-blue-500/10 px-4 py-2 text-xs font-black text-blue-600 dark:text-blue-300">
-                        View-only from original department
-                      </span>
-                    )}
+                    <button
+                      onClick={() => handleDeleteTopic(topic)}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-red-50 px-4 py-2 text-xs font-black text-red-600 transition hover:bg-red-600 hover:text-white dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-600"
+                    >
+                      <Trash2 size={14} />
+                      Delete
+                    </button>
                   </div>
                 </div>
               );
