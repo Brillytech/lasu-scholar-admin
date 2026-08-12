@@ -6,9 +6,6 @@ export type Topic = {
   title: string;
   description: string | null;
   created_at: string;
-  summary_1?: string | null;
-  summary_2?: string | null;
-  summary_3?: string | null;
   courses?: {
     id?: string;
     code: string;
