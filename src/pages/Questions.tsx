@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import SelectRaw from "../components/SelectRaw";
+import { useSelectColors } from "../hooks/useIsDarkMode";
 import {
   Download,
   Edit3,
@@ -223,6 +224,7 @@ function getLevelOptions(school: string, department?: string) {
 export default function Questions() {
   const { profile } = useAdminAuth();
   const isSuperAdmin = profile?.role === "super_admin";
+  const selectColors = useSelectColors();
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -997,11 +999,16 @@ export default function Questions() {
             setTopicFilter("");
             setVisibleCount(20);
           }}
+          style={selectColors}
           className="h-12 rounded-2xl border border-orange/10 bg-white/85 px-4 text-sm font-bold text-navy shadow-sm outline-none backdrop-blur-xl dark:border-white/10 dark:bg-white/10 dark:text-white"
         >
-          <option value="">All Courses</option>
+          <option value="" style={selectColors}>All Courses</option>
           {courses.map((course) => (
-            <option key={`${course.id}-${course.is_shared ? "shared" : "owned"}`} value={course.id}>
+            <option
+              key={`${course.id}-${course.is_shared ? "shared" : "owned"}`}
+              value={course.id}
+              style={selectColors}
+            >
               {course.code} - {course.title}{course.is_shared ? " (Shared)" : ""}
             </option>
           ))}
@@ -1013,11 +1020,12 @@ export default function Questions() {
             setTopicFilter(e.target.value);
             setVisibleCount(20);
           }}
+          style={selectColors}
           className="h-12 rounded-2xl border border-orange/10 bg-white/85 px-4 text-sm font-bold text-navy shadow-sm outline-none backdrop-blur-xl dark:border-white/10 dark:bg-white/10 dark:text-white"
         >
-          <option value="">All Topics</option>
+          <option value="" style={selectColors}>All Topics</option>
           {filteredTopicsForFilter.map((topic) => (
-            <option key={topic.id} value={topic.id}>
+            <option key={topic.id} value={topic.id} style={selectColors}>
               {topic.title}
             </option>
           ))}
@@ -1426,6 +1434,8 @@ function Textarea({ label, value, onChange }: any) {
 }
 
 function Select({ label, value, onChange, options }: any) {
+  const selectColors = useSelectColors();
+
   return (
     <label className="block">
       <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-300">
@@ -1434,12 +1444,17 @@ function Select({ label, value, onChange, options }: any) {
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        style={selectColors}
         className="h-12 w-full rounded-2xl border border-orange/10 bg-soft px-4 text-sm font-bold text-navy outline-none transition focus:border-orange dark:border-white/10 dark:bg-white/10 dark:text-white"
       >
-        {options.length === 0 && <option value="">No option available</option>}
+        {options.length === 0 && (
+          <option value="" style={selectColors}>
+            No option available
+          </option>
+        )}
 
         {options.map((item: any) => (
-          <option key={item.value} value={item.value}>
+          <option key={item.value} value={item.value} style={selectColors}>
             {item.label}
           </option>
         ))}

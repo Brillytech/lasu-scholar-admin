@@ -13,6 +13,7 @@ import {
 import SearchableSelect from "../components/SearchableSelect";
 import SelectRaw from "../components/SelectRaw";
 import { useAdminAuth } from "../context/AuthContext";
+import { useSelectColors } from "../hooks/useIsDarkMode";
 import { createAdminLog } from "../services/adminLogs";
 import type { AcademicPeriod, AppPeriodControl, Course } from "../services/courses";
 import {
@@ -223,6 +224,7 @@ type BulkRow = DriveFile & {
 export default function Materials() {
   const { profile } = useAdminAuth();
   const isSuperAdmin = profile?.role === "super_admin";
+  const selectColors = useSelectColors();
 
   const [materials, setMaterials] = useState<Material[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -1375,10 +1377,11 @@ export default function Materials() {
                       <select
                         value={file.type}
                         onChange={(e) => updateBulkFile(file.id, { type: e.target.value })}
+                        style={selectColors}
                         className="h-9 rounded-lg border border-orange/10 bg-transparent px-2 text-xs font-black text-navy outline-none dark:text-white"
                       >
                         {["pdf", "video", "note", "image", "link"].map((t) => (
-                          <option key={t} value={t}>
+                          <option key={t} value={t} style={selectColors}>
                             {t.toUpperCase()}
                           </option>
                         ))}
@@ -1387,11 +1390,12 @@ export default function Materials() {
                       <select
                         value={file.topic_id}
                         onChange={(e) => updateBulkFile(file.id, { topic_id: e.target.value })}
+                        style={selectColors}
                         className="h-9 rounded-lg border border-orange/10 bg-transparent px-2 text-xs font-bold text-navy outline-none dark:text-white"
                       >
-                        <option value="">Select topic...</option>
+                        <option value="" style={selectColors}>Select topic...</option>
                         {bulkTopicsForCourse.map((topic) => (
-                          <option key={topic.id} value={topic.id}>
+                          <option key={topic.id} value={topic.id} style={selectColors}>
                             {topic.title}
                           </option>
                         ))}
@@ -1486,6 +1490,8 @@ function Textarea({ label, value, onChange }: any) {
 }
 
 function Select({ label, value, onChange, options }: any) {
+  const selectColors = useSelectColors();
+
   return (
     <label className="block">
       <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-300">
@@ -1494,12 +1500,17 @@ function Select({ label, value, onChange, options }: any) {
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        style={selectColors}
         className="h-12 w-full rounded-2xl border border-orange/10 bg-soft px-4 text-sm font-bold text-navy outline-none transition focus:border-orange dark:border-white/10 dark:bg-white/10 dark:text-white"
       >
-        {options.length === 0 && <option value="">No option available</option>}
+        {options.length === 0 && (
+          <option value="" style={selectColors}>
+            No option available
+          </option>
+        )}
 
         {options.map((item: any) => (
-          <option key={item.value} value={item.value}>
+          <option key={item.value} value={item.value} style={selectColors}>
             {item.label}
           </option>
         ))}

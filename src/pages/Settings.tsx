@@ -11,6 +11,7 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
+import { useSelectColors } from "../hooks/useIsDarkMode";
 import { supabase } from "../lib/supabase";
 import type { AdminRole, AdminUser } from "../services/admins";
 import {
@@ -29,6 +30,8 @@ const emptyForm = {
 };
 
 export default function Settings() {
+  const selectColors = useSelectColors();
+
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [currentAdmin, setCurrentAdmin] = useState<AdminUser | null>(null);
 
@@ -358,10 +361,11 @@ where lower(email) = '${cleanEmail}';`;
                   }))
                 }
                 disabled={!isSuperAdmin}
+                style={selectColors}
                 className="h-12 rounded-2xl border border-orange/10 bg-soft px-4 text-sm font-bold text-navy outline-none transition focus:border-orange disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/10 dark:text-white"
               >
-                <option value="admin">Admin</option>
-                <option value="super_admin">Super Admin</option>
+                <option value="admin" style={selectColors}>Admin</option>
+                <option value="super_admin" style={selectColors}>Super Admin</option>
               </select>
             </div>
 

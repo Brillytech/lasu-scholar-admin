@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { createAdminLog } from "../services/adminLogs";
 import { useAdminAuth } from "../context/AuthContext";
+import { useSelectColors } from "../hooks/useIsDarkMode";
 import type { Student } from "../services/students";
 import {
   getStudents,
@@ -39,6 +40,7 @@ function isLasucom100L(student: Student) {
 
 export default function Students() {
   const { profile } = useAdminAuth();
+  const selectColors = useSelectColors();
 
   const [students, setStudents] = useState<Student[]>([]);
   const [search, setSearch] = useState("");
@@ -187,11 +189,12 @@ export default function Students() {
             <select
               value={promotionDepartment}
               onChange={(e) => setPromotionDepartment(e.target.value)}
+              style={selectColors}
               className="h-12 rounded-2xl border border-orange/10 bg-soft px-4 text-sm font-bold text-navy shadow-sm outline-none backdrop-blur-xl dark:border-white/10 dark:bg-white/10 dark:text-white"
             >
-              <option value="">Select Department</option>
+              <option value="" style={selectColors}>Select Department</option>
               {LASUCOM_DEPARTMENTS.map((department) => (
-                <option key={department} value={department}>
+                <option key={department} value={department} style={selectColors}>
                   {department}
                 </option>
               ))}
@@ -268,11 +271,12 @@ export default function Students() {
             setSchoolFilter(e.target.value);
             setVisibleCount(50);
           }}
+          style={selectColors}
           className="h-12 rounded-2xl border border-orange/10 bg-white/85 px-4 text-sm font-bold text-navy shadow-sm outline-none backdrop-blur-xl dark:border-white/10 dark:bg-white/10 dark:text-white"
         >
-          <option value="">All Schools</option>
-          <option value="LASU">LASU</option>
-          <option value="LASUCOM">LASUCOM</option>
+          <option value="" style={selectColors}>All Schools</option>
+          <option value="LASU" style={selectColors}>LASU</option>
+          <option value="LASUCOM" style={selectColors}>LASUCOM</option>
         </select>
 
         <select
@@ -281,17 +285,18 @@ export default function Students() {
             setLevelFilter(e.target.value);
             setVisibleCount(50);
           }}
+          style={selectColors}
           className="h-12 rounded-2xl border border-orange/10 bg-white/85 px-4 text-sm font-bold text-navy shadow-sm outline-none backdrop-blur-xl dark:border-white/10 dark:bg-white/10 dark:text-white"
         >
-          <option value="">All Levels</option>
-          <option value="100L">100L</option>
-          <option value="100 Level">100 Level</option>
-          <option value="200L">200L</option>
-          <option value="200 Level">200 Level</option>
-          <option value="300L">300L</option>
-          <option value="400L">400L</option>
-          <option value="500L">500L</option>
-          <option value="600L">600L</option>
+          <option value="" style={selectColors}>All Levels</option>
+          <option value="100L" style={selectColors}>100L</option>
+          <option value="100 Level" style={selectColors}>100 Level</option>
+          <option value="200L" style={selectColors}>200L</option>
+          <option value="200 Level" style={selectColors}>200 Level</option>
+          <option value="300L" style={selectColors}>300L</option>
+          <option value="400L" style={selectColors}>400L</option>
+          <option value="500L" style={selectColors}>500L</option>
+          <option value="600L" style={selectColors}>600L</option>
         </select>
 
         <select
@@ -300,11 +305,12 @@ export default function Students() {
             setProfileFilter(e.target.value);
             setVisibleCount(50);
           }}
+          style={selectColors}
           className="h-12 rounded-2xl border border-orange/10 bg-white/85 px-4 text-sm font-bold text-navy shadow-sm outline-none backdrop-blur-xl dark:border-white/10 dark:bg-white/10 dark:text-white"
         >
-          <option value="">All Profiles</option>
-          <option value="completed">Completed</option>
-          <option value="incomplete">Incomplete</option>
+          <option value="" style={selectColors}>All Profiles</option>
+          <option value="completed" style={selectColors}>Completed</option>
+          <option value="incomplete" style={selectColors}>Incomplete</option>
         </select>
       </div>
 

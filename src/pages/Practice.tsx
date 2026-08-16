@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import SelectRaw from "../components/SelectRaw";
+import { useSelectColors } from "../hooks/useIsDarkMode";
 import {
   Activity,
   BarChart3,
@@ -183,6 +184,8 @@ function getLevelOptions(school: string, department?: string) {
 }
 
 export default function Practice() {
+  const selectColors = useSelectColors();
+
   const [attempts, setAttempts] = useState<PracticeAttempt[]>([]);
   const [answers, setAnswers] = useState<PracticeAnswer[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -612,11 +615,16 @@ export default function Practice() {
             setCourseFilter(e.target.value);
             setVisibleCount(50);
           }}
+          style={selectColors}
           className="h-12 rounded-2xl border border-orange/10 bg-white/85 px-4 text-sm font-bold text-navy shadow-sm outline-none backdrop-blur-xl dark:border-white/10 dark:bg-white/10 dark:text-white"
         >
-          <option value="">All Courses</option>
+          <option value="" style={selectColors}>All Courses</option>
           {courses.map((course) => (
-            <option key={`${course.id}-${course.is_shared ? "shared" : "owned"}`} value={course.id}>
+            <option
+              key={`${course.id}-${course.is_shared ? "shared" : "owned"}`}
+              value={course.id}
+              style={selectColors}
+            >
               {course.code} - {course.title}{course.is_shared ? " (Shared)" : ""}
             </option>
           ))}
@@ -628,12 +636,13 @@ export default function Practice() {
             setScoreFilter(e.target.value);
             setVisibleCount(50);
           }}
+          style={selectColors}
           className="h-12 rounded-2xl border border-orange/10 bg-white/85 px-4 text-sm font-bold text-navy shadow-sm outline-none backdrop-blur-xl dark:border-white/10 dark:bg-white/10 dark:text-white"
         >
-          <option value="">All Scores</option>
-          <option value="excellent">Excellent 80%+</option>
-          <option value="average">Average 50% - 79%</option>
-          <option value="weak">Weak Below 50%</option>
+          <option value="" style={selectColors}>All Scores</option>
+          <option value="excellent" style={selectColors}>Excellent 80%+</option>
+          <option value="average" style={selectColors}>Average 50% - 79%</option>
+          <option value="weak" style={selectColors}>Weak Below 50%</option>
         </select>
       </div>
 

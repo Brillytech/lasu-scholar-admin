@@ -146,6 +146,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useAdminAuth } from "../context/AuthContext";
+import { useSelectColors } from "../hooks/useIsDarkMode";
 import { createAdminLog } from "../services/adminLogs";
 import type {
   AcademicPeriod,
@@ -2119,6 +2120,8 @@ function IconPickerField({
 }
 
 function Select({ label, value, onChange, options, labels }: any) {
+  const selectColors = useSelectColors();
+
   return (
     <label className="block">
       <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-300">
@@ -2127,10 +2130,11 @@ function Select({ label, value, onChange, options, labels }: any) {
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        style={selectColors}
         className="h-12 w-full rounded-2xl border border-orange/10 bg-soft px-4 text-sm font-bold text-navy outline-none transition focus:border-orange dark:border-white/10 dark:bg-white/10 dark:text-white"
       >
         {options.map((item: string) => (
-          <option key={item || "placeholder"} value={item}>
+          <option key={item || "placeholder"} value={item} style={selectColors}>
             {labels?.[item] || item || `Select ${label}`}
           </option>
         ))}

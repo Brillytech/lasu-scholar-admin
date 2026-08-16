@@ -9,6 +9,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useAdminAuth } from "../context/AuthContext";
+import { useSelectColors } from "../hooks/useIsDarkMode";
 import { createAdminLog } from "../services/adminLogs";
 import type { Notification } from "../services/notifications";
 import {
@@ -193,6 +194,7 @@ function getDepartmentOptions(school: string, faculty: string) {
 
 export default function Notifications() {
   const { profile } = useAdminAuth();
+  const selectColors = useSelectColors();
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [form, setForm] = useState(emptyForm);
@@ -636,23 +638,25 @@ export default function Notifications() {
             <select
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
+              style={selectColors}
               className="h-12 rounded-2xl border border-orange/10 bg-white/85 px-4 text-sm font-bold text-navy shadow-sm outline-none backdrop-blur-xl dark:border-white/10 dark:bg-white/10 dark:text-white"
             >
-              <option value="">All</option>
-              <option value="unread">Unread</option>
-              <option value="read">Read</option>
-              <option value="student">Student Notices</option>
-              <option value="admin">Admin Alerts</option>
+              <option value="" style={selectColors}>All</option>
+              <option value="unread" style={selectColors}>Unread</option>
+              <option value="read" style={selectColors}>Read</option>
+              <option value="student" style={selectColors}>Student Notices</option>
+              <option value="admin" style={selectColors}>Admin Alerts</option>
             </select>
 
             <select
               value={sourceFilter}
               onChange={(e) => setSourceFilter(e.target.value)}
+              style={selectColors}
               className="h-12 rounded-2xl border border-orange/10 bg-white/85 px-4 text-sm font-bold text-navy shadow-sm outline-none backdrop-blur-xl dark:border-white/10 dark:bg-white/10 dark:text-white"
             >
-              <option value="">All Sources</option>
-              <option value="admin">Posted</option>
-              <option value="system">System</option>
+              <option value="" style={selectColors}>All Sources</option>
+              <option value="admin" style={selectColors}>Posted</option>
+              <option value="system" style={selectColors}>System</option>
             </select>
           </div>
 
@@ -838,6 +842,8 @@ function Textarea({ label, value, onChange }: any) {
 }
 
 function Select({ label, value, onChange, options }: any) {
+  const selectColors = useSelectColors();
+
   return (
     <label className="block">
       <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-300">
@@ -846,10 +852,11 @@ function Select({ label, value, onChange, options }: any) {
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        style={selectColors}
         className="h-12 w-full rounded-2xl border border-orange/10 bg-soft px-4 text-sm font-bold text-navy outline-none transition focus:border-orange dark:border-white/10 dark:bg-white/10 dark:text-white"
       >
         {options.map((item: any) => (
-          <option key={item.value} value={item.value}>
+          <option key={item.value} value={item.value} style={selectColors}>
             {item.label}
           </option>
         ))}

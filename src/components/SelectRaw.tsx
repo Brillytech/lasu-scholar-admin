@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useSelectColors } from "../hooks/useIsDarkMode";
 
 type SelectRawProps = {
   label: string;
@@ -7,34 +7,13 @@ type SelectRawProps = {
   options: string[];
 };
 
-function useIsDarkMode() {
-  const [isDark, setIsDark] = useState(
-    () => document.documentElement.classList.contains("dark")
-  );
-
-  useEffect(() => {
-    const root = document.documentElement;
-    const observer = new MutationObserver(() => {
-      setIsDark(root.classList.contains("dark"));
-    });
-    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
-  }, []);
-
-  return isDark;
-}
-
 export default function SelectRaw({
   label,
   value,
   onChange,
   options,
 }: SelectRawProps) {
-  const isDark = useIsDarkMode();
-
-  const selectColors = isDark
-    ? { backgroundColor: "#0b1626", color: "#f8fafc", colorScheme: "dark" as const }
-    : { backgroundColor: "#ffffff", color: "#07101f", colorScheme: "light" as const };
+  const selectColors = useSelectColors();
 
   return (
     <label className="block">
