@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import SelectRaw from "../components/SelectRaw";
 import { useSelectColors } from "../hooks/useIsDarkMode";
 import {
@@ -9,6 +9,7 @@ import {
   FileUp,
   HelpCircle,
   ListChecks,
+  PenLine,
   Plus,
   Search,
   SlidersHorizontal,
@@ -35,6 +36,30 @@ import {
   getQuestions,
   updateQuestion,
 } from "../services/questions";
+import type { TheoryQuestion } from "../services/theoryQuestions";
+import {
+  createTheoryQuestion,
+  deleteTheoryQuestion,
+  getTheoryQuestions,
+  updateTheoryQuestion,
+} from "../services/theoryQuestions";
+
+/*
+  TipTap, MathLive, KaTeX and DOMPurify are heavy and only matter once an admin
+  actually works with theory content, so they stay out of the initial bundle.
+  Everything they pull in lives behind these two boundaries.
+*/
+const RichMathEditor = lazy(() => import("../components/RichMathEditor"));
+const RenderedContent = lazy(() => import("../components/RenderedContent"));
+
+function EditorFallback({ height = 180 }: { height?: number }) {
+  return (
+    <div
+      className="animate-pulse rounded-2xl bg-soft dark:bg-white/10"
+      style={{ height }}
+    />
+  );
+}
 
 const LASU_DATA: Record<string, string[]> = {
   Arts: [
@@ -184,6 +209,16 @@ const emptyQuestionForm = {
   explanation: "",
 };
 
+const emptyTheoryForm = {
+  course_id: "",
+  topic_id: "",
+  question_html: "",
+  question_text: "",
+  answer_html: "",
+  answer_text: "",
+  marks: "",
+};
+
 type BulkRow = {
   course_code: string;
   topic_title: string;
@@ -254,6 +289,16 @@ export default function Questions() {
   const [expandedQuestions, setExpandedQuestions] = useState<string[]>([]);
   const [visibleCount, setVisibleCount] = useState(20);
 
+  /* MCQ and theory questions share this page's workspace, filters and search. */
+  const [tab, setTab] = useState<"mcq" | "theory">("mcq");
+
+  const [theoryQuestions, setTheoryQuestions] = useState<TheoryQuestion[]>([]);
+  const [theoryForm, setTheoryForm] = useState(emptyTheoryForm);
+  const [theoryModalOpen, setTheoryModalOpen] = useState(false);
+  const [editingTheory, setEditingTheory] = useState<TheoryQuestion | null>(null);
+  const [savingTheory, setSavingTheory] = useState(false);
+  const [expandedTheory, setExpandedTheory] = useState<string[]>([]);
+
   const facultyOptions = Object.keys(LASU_DATA);
   const departmentOptions = getDepartmentOptions(context.school, context.faculty);
   const levelOptions = getLevelOptions(context.school, context.department);
@@ -299,6 +344,7 @@ export default function Questions() {
       setCourses([]);
       setTopics([]);
       setQuestions([]);
+      setTheoryQuestions([]);
       setLoading(false);
       return;
     }
@@ -349,6 +395,7 @@ export default function Questions() {
       setCourses([]);
       setTopics([]);
       setQuestions([]);
+      setTheoryQuestions([]);
       setLoading(false);
       return;
     }
@@ -367,14 +414,16 @@ export default function Questions() {
       const courseIds = coursesData.map((course) => course.id);
       const topicsData = await getTopics({ course_ids: courseIds });
       const topicIds = topicsData.map((topic) => topic.id);
-      const questionsData = await getQuestions({
-        course_ids: courseIds,
-        topic_ids: topicIds,
-      });
+
+      const [questionsData, theoryData] = await Promise.all([
+        getQuestions({ course_ids: courseIds, topic_ids: topicIds }),
+        getTheoryQuestions({ course_ids: courseIds, topic_ids: topicIds }),
+      ]);
 
       setCourses(coursesData);
       setTopics(topicsData);
       setQuestions(questionsData);
+      setTheoryQuestions(theoryData);
     } catch (error: any) {
       alert(error.message || "Could not load questions.");
     } finally {
@@ -605,6 +654,153 @@ export default function Questions() {
     }
   }
 
+  function toggleTheory(id: string) {
+    setExpandedTheory((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
+
+  function openCreateTheory() {
+    if (ownedCourses.length === 0) {
+      alert("Create a course in this workspace first.");
+      return;
+    }
+
+    const firstCourseWithTopic = ownedCourses.find((course) =>
+      topics.some((topic) => topic.course_id === course.id)
+    );
+
+    if (!firstCourseWithTopic) {
+      alert("Create a topic under a course first.");
+      return;
+    }
+
+    const firstTopic = topics.find(
+      (topic) => topic.course_id === firstCourseWithTopic.id
+    );
+
+    setEditingTheory(null);
+    setTheoryForm({
+      ...emptyTheoryForm,
+      course_id: firstCourseWithTopic.id,
+      topic_id: firstTopic?.id || "",
+    });
+    setTheoryModalOpen(true);
+  }
+
+  function openEditTheory(item: TheoryQuestion) {
+    setEditingTheory(item);
+    setTheoryForm({
+      course_id: item.course_id || "",
+      topic_id: item.topic_id || "",
+      question_html: item.question_html || "",
+      question_text: item.question_text || "",
+      answer_html: item.answer_html || "",
+      answer_text: item.answer_text || "",
+      marks: item.marks === null || item.marks === undefined ? "" : String(item.marks),
+    });
+    setTheoryModalOpen(true);
+  }
+
+  function handleTheoryCourseChange(value: string) {
+    const firstTopic = topics.find((topic) => topic.course_id === value);
+
+    setTheoryForm((prev) => ({
+      ...prev,
+      course_id: value,
+      topic_id: firstTopic?.id || "",
+    }));
+  }
+
+  async function handleSaveTheory() {
+    /*
+      question_text is derived from the editor content, so it is empty exactly
+      when the question has no actual text -- a more reliable check than the
+      HTML, which is "<p></p>" for an empty editor.
+    */
+    if (
+      !theoryForm.course_id ||
+      !theoryForm.topic_id ||
+      !theoryForm.question_text.trim()
+    ) {
+      alert("Please fill the course, topic and question.");
+      return;
+    }
+
+    try {
+      setSavingTheory(true);
+
+      const payload = {
+        course_id: theoryForm.course_id,
+        topic_id: theoryForm.topic_id,
+        question_html: theoryForm.question_html,
+        question_text: theoryForm.question_text,
+        answer_html: theoryForm.answer_html,
+        answer_text: theoryForm.answer_text,
+        marks: theoryForm.marks,
+      };
+
+      if (editingTheory) {
+        const updated = await updateTheoryQuestion(editingTheory.id, payload);
+
+        await createAdminLog({
+          admin_id: profile?.id,
+          action: "UPDATE_THEORY_QUESTION",
+          target_table: "theory_questions",
+          target_id: updated.id,
+          description: `Updated theory question under ${updated.courses?.code || "course"}`,
+        });
+      } else {
+        const created = await createTheoryQuestion({
+          ...payload,
+          created_by: profile?.id,
+        });
+
+        await createAdminLog({
+          admin_id: profile?.id,
+          action: "CREATE_THEORY_QUESTION",
+          target_table: "theory_questions",
+          target_id: created.id,
+          description: `Added theory question under ${created.courses?.code || "course"}`,
+        });
+      }
+
+      setTheoryModalOpen(false);
+      await loadPageData();
+    } catch (error: any) {
+      alert(error.message || "Could not save theory question.");
+    } finally {
+      setSavingTheory(false);
+    }
+  }
+
+  async function handleDeleteTheory(item: TheoryQuestion) {
+    if (!isSuperAdmin) {
+      alert("Only super admins can delete questions.");
+      return;
+    }
+
+    const confirmed = confirm("Delete this theory question?");
+
+    if (!confirmed) return;
+
+    try {
+      await deleteTheoryQuestion(item.id);
+
+      await createAdminLog({
+        admin_id: profile?.id,
+        action: "DELETE_THEORY_QUESTION",
+        target_table: "theory_questions",
+        target_id: item.id,
+        description: `Deleted theory question under ${item.courses?.code || "course"}`,
+      });
+
+      await loadPageData();
+    } catch (error: any) {
+      alert(error.message || "Could not delete theory question.");
+    }
+  }
+
   function downloadTemplate() {
     const headers = [
       "course_code",
@@ -832,6 +1028,37 @@ export default function Questions() {
   const visibleQuestions = filteredQuestions.slice(0, visibleCount);
   const hasMoreQuestions = filteredQuestions.length > visibleCount;
 
+  /*
+    Searches the plain-text mirrors rather than the stored HTML, so a search for
+    "glycolysis" is not thrown off by tags and a search never matches markup.
+  */
+  const filteredTheoryQuestions = useMemo(() => {
+    const q = search.trim().toLowerCase();
+
+    return theoryQuestions.filter((item) => {
+      const course = courseById.get(item.course_id);
+
+      const matchesSearch =
+        !q ||
+        item.question_text?.toLowerCase().includes(q) ||
+        item.answer_text?.toLowerCase().includes(q) ||
+        item.courses?.code?.toLowerCase().includes(q) ||
+        item.topics?.title?.toLowerCase().includes(q) ||
+        course?.code?.toLowerCase().includes(q) ||
+        course?.title?.toLowerCase().includes(q);
+
+      const matchesCourse = !courseFilter || item.course_id === courseFilter;
+      const matchesTopic = !topicFilter || item.topic_id === topicFilter;
+
+      return matchesSearch && matchesCourse && matchesTopic;
+    });
+  }, [theoryQuestions, search, courseFilter, topicFilter, courseById]);
+
+  const visibleTheoryQuestions = filteredTheoryQuestions.slice(0, visibleCount);
+  const hasMoreTheory = filteredTheoryQuestions.length > visibleCount;
+
+  const isTheory = tab === "theory";
+
   return (
     <div>
       <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -848,22 +1075,71 @@ export default function Questions() {
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row">
-          <button
-            onClick={() => setBulkModalOpen(true)}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-navy px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.02] sm:w-auto"
-          >
-            <FileUp size={18} />
-            Bulk Upload
-          </button>
+          {/* Bulk upload is CSV-based and only applies to MCQs. */}
+          {!isTheory && (
+            <button
+              onClick={() => setBulkModalOpen(true)}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-navy px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.02] sm:w-auto"
+            >
+              <FileUp size={18} />
+              Bulk Upload
+            </button>
+          )}
 
           <button
-            onClick={openCreateQuestion}
+            onClick={isTheory ? openCreateTheory : openCreateQuestion}
             className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange to-amber-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.02] sm:w-auto"
           >
             <Plus size={18} />
-            Add Question
+            {isTheory ? "Add Theory Question" : "Add Question"}
           </button>
         </div>
+      </div>
+
+      <div className="mb-6 inline-flex rounded-2xl border border-orange/10 bg-white/85 p-1.5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/10">
+        <button
+          onClick={() => {
+            setTab("mcq");
+            setVisibleCount(20);
+          }}
+          className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-black transition ${
+            isTheory
+              ? "text-slate-500 hover:text-orange dark:text-slate-300"
+              : "bg-orange text-white shadow-lg shadow-orange-500/20"
+          }`}
+        >
+          <ListChecks size={16} />
+          Multiple Choice
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] ${
+              isTheory ? "bg-soft dark:bg-white/10" : "bg-white/25"
+            }`}
+          >
+            {questions.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => {
+            setTab("theory");
+            setVisibleCount(20);
+          }}
+          className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-black transition ${
+            isTheory
+              ? "bg-orange text-white shadow-lg shadow-orange-500/20"
+              : "text-slate-500 hover:text-orange dark:text-slate-300"
+          }`}
+        >
+          <PenLine size={16} />
+          Theory
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] ${
+              isTheory ? "bg-white/25" : "bg-soft dark:bg-white/10"
+            }`}
+          >
+            {theoryQuestions.length}
+          </span>
+        </button>
       </div>
 
       <div className="mb-6 rounded-[32px] border border-orange/10 bg-white/85 p-5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/10">
@@ -959,9 +1235,9 @@ export default function Questions() {
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         <SummaryCard
-          label="Workspace Questions"
-          value={questions.length}
-          icon={ListChecks}
+          label={isTheory ? "Theory Questions" : "Workspace Questions"}
+          value={isTheory ? theoryQuestions.length : questions.length}
+          icon={isTheory ? PenLine : ListChecks}
           color="bg-green-50 text-green-600"
         />
         <SummaryCard
@@ -972,7 +1248,9 @@ export default function Questions() {
         />
         <SummaryCard
           label="Visible Results"
-          value={filteredQuestions.length}
+          value={
+            isTheory ? filteredTheoryQuestions.length : filteredQuestions.length
+          }
           icon={Search}
           color="bg-blue-50 text-blue-600"
         />
@@ -1032,7 +1310,8 @@ export default function Questions() {
         </select>
       </div>
 
-      {loading ? (
+      {!isTheory &&
+        (loading ? (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {[1, 2, 3, 4].map((item) => (
             <div key={item} className="h-48 animate-pulse rounded-[26px] bg-white/70 dark:bg-white/10" />
@@ -1163,7 +1442,147 @@ export default function Questions() {
             </div>
           )}
         </>
-      )}
+        ))}
+
+      {isTheory &&
+        (loading ? (
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {[1, 2, 3, 4].map((item) => (
+              <div
+                key={item}
+                className="h-48 animate-pulse rounded-[26px] bg-white/70 dark:bg-white/10"
+              />
+            ))}
+          </div>
+        ) : filteredTheoryQuestions.length === 0 ? (
+          <div className="rounded-[28px] border border-orange/10 bg-white/85 p-10 text-center shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/10">
+            <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-orange/10 text-orange">
+              <PenLine size={28} />
+            </div>
+            <h3 className="mt-5 text-xl font-black text-navy dark:text-white">
+              No theory questions in this workspace yet
+            </h3>
+            <p className="mt-2 text-sm font-semibold text-slate-500 dark:text-slate-300">
+              Add one under a course and topic in{" "}
+              {workspacePeriod?.name || "this period"}.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {visibleTheoryQuestions.map((item) => {
+                const isExpanded = expandedTheory.includes(item.id);
+                const course = courseById.get(item.course_id);
+                const isShared = Boolean(course?.is_shared);
+                const hasMarks = item.marks !== null && item.marks !== undefined;
+
+                return (
+                  <div
+                    key={item.id}
+                    className="rounded-[26px] border border-orange/10 bg-white/85 p-5 shadow-sm backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-white/10"
+                  >
+                    <div className="mb-4 flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-orange/10 px-3 py-1 text-xs font-black text-orange">
+                        {course?.code || item.courses?.code || "Course"}
+                      </span>
+                      <span className="rounded-full bg-soft px-3 py-1 text-xs font-black text-slate-500 dark:bg-slate-950/50 dark:text-slate-300">
+                        {item.topics?.title || "Topic"}
+                      </span>
+                      {hasMarks && (
+                        <span className="rounded-full bg-blue-500/10 px-3 py-1 text-xs font-black text-blue-600 dark:text-blue-300">
+                          {item.marks} marks
+                        </span>
+                      )}
+                      {isShared && (
+                        <span className="rounded-full bg-blue-500/10 px-3 py-1 text-xs font-black text-blue-600 dark:text-blue-300">
+                          Shared
+                        </span>
+                      )}
+                    </div>
+
+                    {/*
+                      The collapsed preview uses the plain-text mirror on
+                      purpose: it keeps KaTeX out of the list render entirely,
+                      so the heavy chunk only loads when a card is expanded or
+                      the editor opens.
+                    */}
+                    <h3 className="line-clamp-3 text-base font-black leading-6 text-navy dark:text-white">
+                      {item.question_text || "Untitled question"}
+                    </h3>
+
+                    <button
+                      onClick={() => toggleTheory(item.id)}
+                      className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-orange/10 px-4 py-2 text-xs font-black text-orange"
+                    >
+                      {isExpanded ? <EyeOff size={14} /> : <Eye size={14} />}
+                      {isExpanded ? "Hide Details" : "View Details"}
+                    </button>
+
+                    {isExpanded && (
+                      <div className="mt-4">
+                        <Suspense fallback={<EditorFallback height={80} />}>
+                          <RenderedContent html={item.question_html} />
+
+                          {item.answer_html && (
+                            <div className="mt-4 rounded-2xl bg-soft p-4 dark:bg-slate-950/50">
+                              <p className="text-xs font-black uppercase tracking-[0.14em] text-orange">
+                                Model Answer
+                              </p>
+                              <RenderedContent
+                                html={item.answer_html}
+                                className="mt-2"
+                              />
+                            </div>
+                          )}
+                        </Suspense>
+                      </div>
+                    )}
+
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      <button
+                        onClick={() => openEditTheory(item)}
+                        className="inline-flex items-center gap-2 rounded-2xl bg-soft px-4 py-2 text-xs font-black text-navy transition hover:bg-orange hover:text-white dark:bg-slate-950/50 dark:text-white dark:hover:bg-orange"
+                      >
+                        <Edit3 size={14} />
+                        Edit
+                      </button>
+
+                      {isSuperAdmin && (
+                        <button
+                          onClick={() => handleDeleteTheory(item)}
+                          className="inline-flex items-center gap-2 rounded-2xl bg-red-50 px-4 py-2 text-xs font-black text-red-600 transition hover:bg-red-600 hover:text-white dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-600"
+                        >
+                          <Trash2 size={14} />
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {filteredTheoryQuestions.length > 20 && (
+              <div className="mt-8 flex justify-center">
+                {hasMoreTheory ? (
+                  <button
+                    onClick={() => setVisibleCount((prev) => prev + 20)}
+                    className="rounded-2xl bg-navy px-6 py-3 text-sm font-black text-white shadow-lg transition hover:scale-[1.02] dark:bg-white/10"
+                  >
+                    Show More Questions
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setVisibleCount(20)}
+                    className="rounded-2xl bg-white/85 px-6 py-3 text-sm font-black text-navy shadow-sm backdrop-blur-xl transition hover:scale-[1.02] dark:bg-white/10 dark:text-white"
+                  >
+                    Show Less
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        ))}
 
       {questionModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-navy/60 px-4 py-8 backdrop-blur-sm">
@@ -1382,6 +1801,142 @@ export default function Questions() {
               className="mt-5 w-full rounded-2xl bg-gradient-to-r from-orange to-amber-500 px-5 py-3 text-sm font-black text-white disabled:opacity-60"
             >
               {importing ? "Importing..." : "Import Questions"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {theoryModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-navy/60 px-4 py-8 backdrop-blur-sm">
+          <div className="mx-auto w-full max-w-3xl rounded-[30px] border border-orange/10 bg-white/95 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/95">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-orange">
+                  {editingTheory ? "Edit Theory Question" : "New Theory Question"}
+                </p>
+                <h3 className="mt-2 text-2xl font-black text-navy dark:text-white">
+                  {editingTheory ? "Update Question" : "Add Theory Question"}
+                </h3>
+                <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-300">
+                  Saved under {workspacePeriod?.name || "the selected workspace period"}.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setTheoryModalOpen(false)}
+                className="grid h-10 w-10 place-items-center rounded-2xl bg-soft text-navy transition hover:bg-orange hover:text-white dark:bg-white/10 dark:text-white"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Select
+                label="Course"
+                value={theoryForm.course_id}
+                onChange={handleTheoryCourseChange}
+                options={ownedCourses.map((course) => ({
+                  label: `${course.code} - ${course.title}`,
+                  value: course.id,
+                }))}
+              />
+
+              <Select
+                label="Topic"
+                value={theoryForm.topic_id}
+                onChange={(value: string) =>
+                  setTheoryForm((prev) => ({ ...prev, topic_id: value }))
+                }
+                options={topics
+                  .filter((topic) => topic.course_id === theoryForm.course_id)
+                  .map((topic) => ({ label: topic.title, value: topic.id }))}
+              />
+            </div>
+
+            <Suspense fallback={<EditorFallback />}>
+              <div className="mt-4">
+                <RichMathEditor
+                  label="Question"
+                  value={theoryForm.question_html}
+                  onChange={({ html, text }) =>
+                    setTheoryForm((prev) => ({
+                      ...prev,
+                      question_html: html,
+                      question_text: text,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="mt-4">
+                <RichMathEditor
+                  label="Model Answer (optional)"
+                  value={theoryForm.answer_html}
+                  minHeight={140}
+                  onChange={({ html, text }) =>
+                    setTheoryForm((prev) => ({
+                      ...prev,
+                      answer_html: html,
+                      answer_text: text,
+                    }))
+                  }
+                />
+              </div>
+            </Suspense>
+
+            <div className="mt-4 md:max-w-[200px]">
+              <Input
+                label="Marks (optional)"
+                value={theoryForm.marks}
+                onChange={(value: string) =>
+                  setTheoryForm((prev) => ({ ...prev, marks: value }))
+                }
+              />
+            </div>
+
+            {/*
+              Renders the exact HTML that will be stored, through the same
+              sanitize-then-KaTeX path the list and (later) the student app use
+              -- so this previews what is saved, not what the editor happens to
+              be showing.
+            */}
+            <div className="mt-5 rounded-[24px] border border-orange/10 bg-soft p-4 dark:border-white/10 dark:bg-slate-950/40">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-orange">
+                Student Preview
+              </p>
+
+              <Suspense fallback={<EditorFallback height={60} />}>
+                <div className="mt-3">
+                  {theoryForm.question_text.trim() ? (
+                    <RenderedContent html={theoryForm.question_html} />
+                  ) : (
+                    <p className="text-sm font-semibold text-slate-400">
+                      Nothing to preview yet.
+                    </p>
+                  )}
+
+                  {theoryForm.answer_text.trim() && (
+                    <div className="mt-4 border-t border-orange/10 pt-4 dark:border-white/10">
+                      <p className="mb-2 text-xs font-black uppercase tracking-[0.14em] text-slate-400">
+                        Model Answer
+                      </p>
+                      <RenderedContent html={theoryForm.answer_html} />
+                    </div>
+                  )}
+                </div>
+              </Suspense>
+            </div>
+
+            <button
+              onClick={handleSaveTheory}
+              disabled={savingTheory}
+              className="mt-5 w-full rounded-2xl bg-gradient-to-r from-orange to-amber-500 px-5 py-3 text-sm font-black text-white disabled:opacity-60"
+            >
+              {savingTheory
+                ? "Saving..."
+                : editingTheory
+                ? "Save Changes"
+                : "Save Question"}
             </button>
           </div>
         </div>

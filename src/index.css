@@ -53,3 +53,73 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(249,115,22,0.55);
 }
+/* ---------------------------------------------------------------------------
+   Theory question editor (TipTap + MathLive + KaTeX)
+   --------------------------------------------------------------------------- */
+
+.tiptap-content > *:first-child {
+  margin-top: 0;
+}
+
+.tiptap-content > *:last-child {
+  margin-bottom: 0;
+}
+
+.tiptap-content p {
+  margin: 0 0 0.6rem;
+}
+
+.tiptap-content ul,
+.tiptap-content ol,
+.rendered-content ul,
+.rendered-content ol {
+  margin: 0 0 0.6rem;
+  padding-left: 1.4rem;
+}
+
+.tiptap-content ul,
+.rendered-content ul {
+  list-style: disc;
+}
+
+.tiptap-content ol,
+.rendered-content ol {
+  list-style: decimal;
+}
+
+.rendered-content p {
+  margin: 0 0 0.6rem;
+}
+
+.rendered-content > *:last-child {
+  margin-bottom: 0;
+}
+
+/* Equations are clickable in the editor, so make that discoverable. */
+.tiptap-content [data-type="inline-math"],
+.tiptap-content [data-type="block-math"] {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 0 2px;
+  transition: background-color 0.15s ease;
+}
+
+.tiptap-content [data-type="inline-math"]:hover,
+.tiptap-content [data-type="block-math"]:hover {
+  background-color: rgba(249, 115, 22, 0.16);
+}
+
+.tiptap-content [data-type="block-math"],
+.rendered-content [data-type="block-math"] {
+  display: block;
+  margin: 0.8rem 0;
+  text-align: center;
+}
+
+/*
+  MathLive's virtual keyboard is appended to <body>, so it has to clear the
+  equation modal (z-60) that opens it.
+*/
+body > .ML__keyboard {
+  z-index: 100;
+}
