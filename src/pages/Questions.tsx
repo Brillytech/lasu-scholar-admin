@@ -13,6 +13,7 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
+  Table2,
   Trash2,
   X,
 } from "lucide-react";
@@ -44,21 +45,40 @@ import {
   updateTheoryQuestion,
 } from "../services/theoryQuestions";
 
+import type { GridQuestion } from "../services/gridQuestions";
+import {
+  createGridQuestion,
+  deleteGridQuestion,
+  getGridQuestions,
+  updateGridQuestion,
+} from "../services/gridQuestions";
+
 import { Input, Select, Textarea } from "../components/FormFields";
 import type { TheoryFormState } from "../components/theoryQuestionForm";
 import { emptyTheoryForm } from "../components/theoryQuestionForm";
+import type { GridFormState } from "../components/gridQuestionForm";
+import {
+  createEmptyGrid,
+  emptyGridForm,
+  validateGrid,
+} from "../components/gridQuestionForm";
+import GridPreview from "../components/GridPreview";
 
 /*
   TipTap, MathLive, KaTeX and DOMPurify are heavy and only matter once an admin
-  actually works with theory content, so they stay out of the initial bundle.
+  actually works with question content, so they stay out of the initial bundle.
 
-  The modal is itself the lazy boundary, so everything it imports rides along in
-  its chunk. RenderedContent is loaded separately because the list needs it to
-  render an expanded question without pulling in the whole editor.
+  Each modal is itself the lazy boundary, so everything it imports rides along
+  in its chunk. RenderedContent is loaded separately because the list needs it
+  to render an expanded question without pulling in a whole editor.
+
+  GridPreview is imported eagerly on purpose: it is a plain read-only table with
+  no heavy dependencies, and the list uses it for every expanded grid question.
 */
 const TheoryQuestionModal = lazy(
   () => import("../components/TheoryQuestionModal")
 );
+const GridQuestionModal = lazy(() => import("../components/GridQuestionModal"));
 const RenderedContent = lazy(() => import("../components/RenderedContent"));
 
 function EditorFallback({ height = 180 }: { height?: number }) {
@@ -288,8 +308,8 @@ export default function Questions() {
   const [expandedQuestions, setExpandedQuestions] = useState<string[]>([]);
   const [visibleCount, setVisibleCount] = useState(20);
 
-  /* MCQ and theory questions share this page's workspace, filters and search. */
-  const [tab, setTab] = useState<"mcq" | "theory">("mcq");
+  /* All three question types share this page's workspace, filters and search. */
+  const [tab, setTab] = useState<"mcq" | "theory" | "grid">("mcq");
 
   const [theoryQuestions, setTheoryQuestions] = useState<TheoryQuestion[]>([]);
   const [theoryForm, setTheoryForm] = useState<TheoryFormState>(emptyTheoryForm);
@@ -297,6 +317,13 @@ export default function Questions() {
   const [editingTheory, setEditingTheory] = useState<TheoryQuestion | null>(null);
   const [savingTheory, setSavingTheory] = useState(false);
   const [expandedTheory, setExpandedTheory] = useState<string[]>([]);
+
+  const [gridQuestions, setGridQuestions] = useState<GridQuestion[]>([]);
+  const [gridForm, setGridForm] = useState<GridFormState>(emptyGridForm);
+  const [gridModalOpen, setGridModalOpen] = useState(false);
+  const [editingGrid, setEditingGrid] = useState<GridQuestion | null>(null);
+  const [savingGrid, setSavingGrid] = useState(false);
+  const [expandedGrid, setExpandedGrid] = useState<string[]>([]);
 
   const facultyOptions = Object.keys(LASU_DATA);
   const departmentOptions = getDepartmentOptions(context.school, context.faculty);
@@ -344,6 +371,7 @@ export default function Questions() {
       setTopics([]);
       setQuestions([]);
       setTheoryQuestions([]);
+      setGridQuestions([]);
       setLoading(false);
       return;
     }
@@ -395,6 +423,7 @@ export default function Questions() {
       setTopics([]);
       setQuestions([]);
       setTheoryQuestions([]);
+      setGridQuestions([]);
       setLoading(false);
       return;
     }
@@ -414,15 +443,17 @@ export default function Questions() {
       const topicsData = await getTopics({ course_ids: courseIds });
       const topicIds = topicsData.map((topic) => topic.id);
 
-      const [questionsData, theoryData] = await Promise.all([
+      const [questionsData, theoryData, gridData] = await Promise.all([
         getQuestions({ course_ids: courseIds, topic_ids: topicIds }),
         getTheoryQuestions({ course_ids: courseIds, topic_ids: topicIds }),
+        getGridQuestions({ course_ids: courseIds, topic_ids: topicIds }),
       ]);
 
       setCourses(coursesData);
       setTopics(topicsData);
       setQuestions(questionsData);
       setTheoryQuestions(theoryData);
+      setGridQuestions(gridData);
     } catch (error: any) {
       alert(error.message || "Could not load questions.");
     } finally {
@@ -790,6 +821,145 @@ export default function Questions() {
     }
   }
 
+  function toggleGrid(id: string) {
+    setExpandedGrid((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
+
+  function openCreateGrid() {
+    if (ownedCourses.length === 0) {
+      alert("Create a course in this workspace first.");
+      return;
+    }
+
+    const firstCourseWithTopic = ownedCourses.find((course) =>
+      topics.some((topic) => topic.course_id === course.id)
+    );
+
+    if (!firstCourseWithTopic) {
+      alert("Create a topic under a course first.");
+      return;
+    }
+
+    const firstTopic = topics.find(
+      (topic) => topic.course_id === firstCourseWithTopic.id
+    );
+
+    setEditingGrid(null);
+    setGridForm({
+      ...emptyGridForm,
+      /* A fresh grid each time -- emptyGridForm.grid is shared module state. */
+      grid: createEmptyGrid(),
+      course_id: firstCourseWithTopic.id,
+      topic_id: firstTopic?.id || "",
+    });
+    setGridModalOpen(true);
+  }
+
+  function openEditGrid(item: GridQuestion) {
+    setEditingGrid(item);
+    setGridForm({
+      course_id: item.course_id || "",
+      topic_id: item.topic_id || "",
+      prompt_html: item.prompt_html || "",
+      prompt_text: item.prompt_text || "",
+      grid: item.grid,
+      marks: item.marks === null || item.marks === undefined ? "" : String(item.marks),
+    });
+    setGridModalOpen(true);
+  }
+
+  async function handleSaveGrid() {
+    if (!gridForm.course_id || !gridForm.topic_id) {
+      alert("Please select a course and topic.");
+      return;
+    }
+
+    /*
+      The modal disables Save while the grid is invalid and shows the reason,
+      so this is a backstop rather than the primary check.
+    */
+    const gridProblem = validateGrid(gridForm.grid);
+
+    if (gridProblem) {
+      alert(gridProblem);
+      return;
+    }
+
+    try {
+      setSavingGrid(true);
+
+      const payload = {
+        course_id: gridForm.course_id,
+        topic_id: gridForm.topic_id,
+        prompt_html: gridForm.prompt_html,
+        prompt_text: gridForm.prompt_text,
+        grid: gridForm.grid,
+        marks: gridForm.marks,
+      };
+
+      if (editingGrid) {
+        const updated = await updateGridQuestion(editingGrid.id, payload);
+
+        await createAdminLog({
+          admin_id: profile?.id,
+          action: "UPDATE_GRID_QUESTION",
+          target_table: "grid_questions",
+          target_id: updated.id,
+          description: `Updated table question under ${updated.courses?.code || "course"}`,
+        });
+      } else {
+        const created = await createGridQuestion({
+          ...payload,
+          created_by: profile?.id,
+        });
+
+        await createAdminLog({
+          admin_id: profile?.id,
+          action: "CREATE_GRID_QUESTION",
+          target_table: "grid_questions",
+          target_id: created.id,
+          description: `Added table question under ${created.courses?.code || "course"}`,
+        });
+      }
+
+      setGridModalOpen(false);
+      await loadPageData();
+    } catch (error: any) {
+      alert(error.message || "Could not save table question.");
+    } finally {
+      setSavingGrid(false);
+    }
+  }
+
+  async function handleDeleteGrid(item: GridQuestion) {
+    if (!isSuperAdmin) {
+      alert("Only super admins can delete questions.");
+      return;
+    }
+
+    const confirmed = confirm("Delete this table question?");
+
+    if (!confirmed) return;
+
+    try {
+      await deleteGridQuestion(item.id);
+
+      await createAdminLog({
+        admin_id: profile?.id,
+        action: "DELETE_GRID_QUESTION",
+        target_table: "grid_questions",
+        target_id: item.id,
+        description: `Deleted table question under ${item.courses?.code || "course"}`,
+      });
+
+      await loadPageData();
+    } catch (error: any) {
+      alert(error.message || "Could not delete table question.");
+    }
+  }
+
   function downloadTemplate() {
     const headers = [
       "course_code",
@@ -1046,7 +1216,44 @@ export default function Questions() {
   const visibleTheoryQuestions = filteredTheoryQuestions.slice(0, visibleCount);
   const hasMoreTheory = filteredTheoryQuestions.length > visibleCount;
 
+  /*
+    Searches prompt_text plus every cell's content, so a table can be found by
+    an answer inside it and not just by its prompt.
+  */
+  const filteredGridQuestions = useMemo(() => {
+    const q = search.trim().toLowerCase();
+
+    return gridQuestions.filter((item) => {
+      const course = courseById.get(item.course_id);
+
+      const cellText = q
+        ? item.grid.rows
+            .flatMap((row) => row.cells.map((cell) => cell.content))
+            .join(" ")
+            .toLowerCase()
+        : "";
+
+      const matchesSearch =
+        !q ||
+        item.prompt_text?.toLowerCase().includes(q) ||
+        cellText.includes(q) ||
+        item.courses?.code?.toLowerCase().includes(q) ||
+        item.topics?.title?.toLowerCase().includes(q) ||
+        course?.code?.toLowerCase().includes(q) ||
+        course?.title?.toLowerCase().includes(q);
+
+      const matchesCourse = !courseFilter || item.course_id === courseFilter;
+      const matchesTopic = !topicFilter || item.topic_id === topicFilter;
+
+      return matchesSearch && matchesCourse && matchesTopic;
+    });
+  }, [gridQuestions, search, courseFilter, topicFilter, courseById]);
+
+  const visibleGridQuestions = filteredGridQuestions.slice(0, visibleCount);
+  const hasMoreGrid = filteredGridQuestions.length > visibleCount;
+
   const isTheory = tab === "theory";
+  const isGrid = tab === "grid";
 
   return (
     <div>
@@ -1065,7 +1272,7 @@ export default function Questions() {
 
         <div className="flex flex-col gap-3 sm:flex-row">
           {/* Bulk upload is CSV-based and only applies to MCQs. */}
-          {!isTheory && (
+          {tab === "mcq" && (
             <button
               onClick={() => setBulkModalOpen(true)}
               className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-navy px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.02] sm:w-auto"
@@ -1076,59 +1283,61 @@ export default function Questions() {
           )}
 
           <button
-            onClick={isTheory ? openCreateTheory : openCreateQuestion}
+            onClick={
+              isGrid
+                ? openCreateGrid
+                : isTheory
+                ? openCreateTheory
+                : openCreateQuestion
+            }
             className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange to-amber-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.02] sm:w-auto"
           >
             <Plus size={18} />
-            {isTheory ? "Add Theory Question" : "Add Question"}
+            {isGrid
+              ? "Add Table Question"
+              : isTheory
+              ? "Add Theory Question"
+              : "Add Question"}
           </button>
         </div>
       </div>
 
-      <div className="mb-6 inline-flex rounded-2xl border border-orange/10 bg-white/85 p-1.5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/10">
-        <button
-          onClick={() => {
-            setTab("mcq");
-            setVisibleCount(20);
-          }}
-          className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-black transition ${
-            isTheory
-              ? "text-slate-500 hover:text-orange dark:text-slate-300"
-              : "bg-orange text-white shadow-lg shadow-orange-500/20"
-          }`}
-        >
-          <ListChecks size={16} />
-          Multiple Choice
-          <span
-            className={`rounded-full px-2 py-0.5 text-[10px] ${
-              isTheory ? "bg-soft dark:bg-white/10" : "bg-white/25"
-            }`}
-          >
-            {questions.length}
-          </span>
-        </button>
+      <div className="mb-6 inline-flex flex-wrap rounded-2xl border border-orange/10 bg-white/85 p-1.5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/10">
+        {(
+          [
+            { key: "mcq", label: "Multiple Choice", icon: ListChecks, count: questions.length },
+            { key: "theory", label: "Theory", icon: PenLine, count: theoryQuestions.length },
+            { key: "grid", label: "Table", icon: Table2, count: gridQuestions.length },
+          ] as const
+        ).map((item) => {
+          const active = tab === item.key;
+          const TabIcon = item.icon;
 
-        <button
-          onClick={() => {
-            setTab("theory");
-            setVisibleCount(20);
-          }}
-          className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-black transition ${
-            isTheory
-              ? "bg-orange text-white shadow-lg shadow-orange-500/20"
-              : "text-slate-500 hover:text-orange dark:text-slate-300"
-          }`}
-        >
-          <PenLine size={16} />
-          Theory
-          <span
-            className={`rounded-full px-2 py-0.5 text-[10px] ${
-              isTheory ? "bg-white/25" : "bg-soft dark:bg-white/10"
-            }`}
-          >
-            {theoryQuestions.length}
-          </span>
-        </button>
+          return (
+            <button
+              key={item.key}
+              onClick={() => {
+                setTab(item.key);
+                setVisibleCount(20);
+              }}
+              className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-black transition ${
+                active
+                  ? "bg-orange text-white shadow-lg shadow-orange-500/20"
+                  : "text-slate-500 hover:text-orange dark:text-slate-300"
+              }`}
+            >
+              <TabIcon size={16} />
+              {item.label}
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] ${
+                  active ? "bg-white/25" : "bg-soft dark:bg-white/10"
+                }`}
+              >
+                {item.count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="mb-6 rounded-[32px] border border-orange/10 bg-white/85 p-5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/10">
@@ -1224,9 +1433,21 @@ export default function Questions() {
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         <SummaryCard
-          label={isTheory ? "Theory Questions" : "Workspace Questions"}
-          value={isTheory ? theoryQuestions.length : questions.length}
-          icon={isTheory ? PenLine : ListChecks}
+          label={
+            isGrid
+              ? "Table Questions"
+              : isTheory
+              ? "Theory Questions"
+              : "Workspace Questions"
+          }
+          value={
+            isGrid
+              ? gridQuestions.length
+              : isTheory
+              ? theoryQuestions.length
+              : questions.length
+          }
+          icon={isGrid ? Table2 : isTheory ? PenLine : ListChecks}
           color="bg-green-50 text-green-600"
         />
         <SummaryCard
@@ -1238,7 +1459,11 @@ export default function Questions() {
         <SummaryCard
           label="Visible Results"
           value={
-            isTheory ? filteredTheoryQuestions.length : filteredQuestions.length
+            isGrid
+              ? filteredGridQuestions.length
+              : isTheory
+              ? filteredTheoryQuestions.length
+              : filteredQuestions.length
           }
           icon={Search}
           color="bg-blue-50 text-blue-600"
@@ -1299,7 +1524,7 @@ export default function Questions() {
         </select>
       </div>
 
-      {!isTheory &&
+      {tab === "mcq" &&
         (loading ? (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {[1, 2, 3, 4].map((item) => (
@@ -1573,6 +1798,138 @@ export default function Questions() {
           </>
         ))}
 
+      {isGrid &&
+        (loading ? (
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {[1, 2, 3, 4].map((item) => (
+              <div
+                key={item}
+                className="h-48 animate-pulse rounded-[26px] bg-white/70 dark:bg-white/10"
+              />
+            ))}
+          </div>
+        ) : filteredGridQuestions.length === 0 ? (
+          <div className="rounded-[28px] border border-orange/10 bg-white/85 p-10 text-center shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/10">
+            <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-orange/10 text-orange">
+              <Table2 size={28} />
+            </div>
+            <h3 className="mt-5 text-xl font-black text-navy dark:text-white">
+              No table questions in this workspace yet
+            </h3>
+            <p className="mt-2 text-sm font-semibold text-slate-500 dark:text-slate-300">
+              Build a fill-in-the-blank table under a course and topic in{" "}
+              {workspacePeriod?.name || "this period"}.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {visibleGridQuestions.map((item) => {
+                const isExpanded = expandedGrid.includes(item.id);
+                const course = courseById.get(item.course_id);
+                const isShared = Boolean(course?.is_shared);
+                const hasMarks = item.marks !== null && item.marks !== undefined;
+
+                return (
+                  <div
+                    key={item.id}
+                    className="rounded-[26px] border border-orange/10 bg-white/85 p-5 shadow-sm backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-white/10"
+                  >
+                    <div className="mb-4 flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-orange/10 px-3 py-1 text-xs font-black text-orange">
+                        {course?.code || item.courses?.code || "Course"}
+                      </span>
+                      <span className="rounded-full bg-soft px-3 py-1 text-xs font-black text-slate-500 dark:bg-slate-950/50 dark:text-slate-300">
+                        {item.topics?.title || "Topic"}
+                      </span>
+                      {/*
+                        Counts come from the DB trigger, so they always match
+                        the stored grid even if it was written by another client.
+                      */}
+                      <span className="rounded-full bg-soft px-3 py-1 text-xs font-black text-slate-500 dark:bg-slate-950/50 dark:text-slate-300">
+                        {item.row_count} × {item.col_count}
+                      </span>
+                      <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-black text-green-600 dark:bg-green-500/10 dark:text-green-300">
+                        {item.blank_count}{" "}
+                        {item.blank_count === 1 ? "blank" : "blanks"}
+                      </span>
+                      {hasMarks && (
+                        <span className="rounded-full bg-blue-500/10 px-3 py-1 text-xs font-black text-blue-600 dark:text-blue-300">
+                          {item.marks} marks
+                        </span>
+                      )}
+                      {isShared && (
+                        <span className="rounded-full bg-blue-500/10 px-3 py-1 text-xs font-black text-blue-600 dark:text-blue-300">
+                          Shared
+                        </span>
+                      )}
+                    </div>
+
+                    <h3 className="line-clamp-2 text-base font-black leading-6 text-navy dark:text-white">
+                      {item.prompt_text || "Fill in the blanks"}
+                    </h3>
+
+                    <button
+                      onClick={() => toggleGrid(item.id)}
+                      className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-orange/10 px-4 py-2 text-xs font-black text-orange"
+                    >
+                      {isExpanded ? <EyeOff size={14} /> : <Eye size={14} />}
+                      {isExpanded ? "Hide Table" : "View Table"}
+                    </button>
+
+                    {isExpanded && (
+                      <div className="mt-4">
+                        {/* reveal: the admin list exists to review the answers. */}
+                        <GridPreview grid={item.grid} reveal />
+                      </div>
+                    )}
+
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      <button
+                        onClick={() => openEditGrid(item)}
+                        className="inline-flex items-center gap-2 rounded-2xl bg-soft px-4 py-2 text-xs font-black text-navy transition hover:bg-orange hover:text-white dark:bg-slate-950/50 dark:text-white dark:hover:bg-orange"
+                      >
+                        <Edit3 size={14} />
+                        Edit
+                      </button>
+
+                      {isSuperAdmin && (
+                        <button
+                          onClick={() => handleDeleteGrid(item)}
+                          className="inline-flex items-center gap-2 rounded-2xl bg-red-50 px-4 py-2 text-xs font-black text-red-600 transition hover:bg-red-600 hover:text-white dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-600"
+                        >
+                          <Trash2 size={14} />
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {filteredGridQuestions.length > 20 && (
+              <div className="mt-8 flex justify-center">
+                {hasMoreGrid ? (
+                  <button
+                    onClick={() => setVisibleCount((prev) => prev + 20)}
+                    className="rounded-2xl bg-navy px-6 py-3 text-sm font-black text-white shadow-lg transition hover:scale-[1.02] dark:bg-white/10"
+                  >
+                    Show More Questions
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setVisibleCount(20)}
+                    className="rounded-2xl bg-white/85 px-6 py-3 text-sm font-black text-navy shadow-sm backdrop-blur-xl transition hover:scale-[1.02] dark:bg-white/10 dark:text-white"
+                  >
+                    Show Less
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        ))}
+
       {questionModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-navy/60 px-4 py-8 backdrop-blur-sm">
           <div className="mx-auto w-full max-w-3xl rounded-[30px] border border-orange/10 bg-white/95 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/95">
@@ -1807,6 +2164,22 @@ export default function Questions() {
             saving={savingTheory}
             onClose={() => setTheoryModalOpen(false)}
             onSave={handleSaveTheory}
+          />
+        </Suspense>
+      )}
+
+      {gridModalOpen && (
+        <Suspense fallback={null}>
+          <GridQuestionModal
+            editing={editingGrid}
+            form={gridForm}
+            onFormChange={setGridForm}
+            courses={ownedCourses}
+            topics={topics}
+            periodName={workspacePeriod?.name}
+            saving={savingGrid}
+            onClose={() => setGridModalOpen(false)}
+            onSave={handleSaveGrid}
           />
         </Suspense>
       )}
