@@ -9,6 +9,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { getLevelOptions } from "../lib/levels";
 import SearchableSelect from "../components/SearchableSelect";
 import SelectRaw from "../components/SelectRaw";
 import type { AcademicPeriod, AppPeriodControl, Course } from "../services/courses";
@@ -182,16 +183,6 @@ function getDepartmentOptions(school: string, faculty: string) {
   return LASU_DATA[faculty] || [];
 }
 
-function getLevelOptions(school: string, department?: string) {
-  if (school !== "LASUCOM") return ["100L", "200L", "300L", "400L", "500L"];
-
-  const periodType = getAcademicPeriodType(department);
-
-  if (periodType === "block") return ["200L", "300L"];
-
-  return ["200L", "300L", "400L", "500L"];
-}
-
 export default function Topics() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -213,7 +204,7 @@ export default function Topics() {
 
   const facultyOptions = Object.keys(LASU_DATA);
   const departmentOptions = getDepartmentOptions(context.school, context.faculty);
-  const levelOptions = getLevelOptions(context.school, context.department);
+  const levelOptions = getLevelOptions(context.school);
 
   const workspacePeriodId = periodControl?.workspace_period_id || periods[0]?.id || "";
   const workspacePeriod = periods.find((item) => item.id === workspacePeriodId) || null;
@@ -327,7 +318,7 @@ export default function Topics() {
         school: "LASUCOM",
         faculty: "College of Medicine",
         department: "",
-        level: "200L",
+        level: "100L",
       });
       return;
     }
@@ -349,12 +340,9 @@ export default function Topics() {
   }
 
   function handleContextDepartmentChange(value: string) {
-    const levels = getLevelOptions(context.school, value);
-
     setContext((prev) => ({
       ...prev,
       department: value,
-      level: levels[0] || prev.level,
     }));
   }
 

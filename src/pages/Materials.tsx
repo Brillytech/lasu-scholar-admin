@@ -10,6 +10,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { getLevelOptions } from "../lib/levels";
 import SearchableSelect from "../components/SearchableSelect";
 import SelectRaw from "../components/SelectRaw";
 import { useAdminAuth } from "../context/AuthContext";
@@ -201,15 +202,6 @@ function getDepartmentOptions(school: string, faculty: string) {
   return LASU_DATA[faculty] || [];
 }
 
-function getLevelOptions(school: string, department?: string) {
-  if (school !== "LASUCOM") return ["100L", "200L", "300L", "400L", "500L"];
-
-  const periodType = getAcademicPeriodType(department);
-
-  if (periodType === "block") return ["200L", "300L"];
-
-  return ["200L", "300L", "400L", "500L"];
-}
 
 // Row shape used inside the Bulk Import modal. Extends the raw Drive file
 // with per-row editable fields, including its OWN topic assignment —
@@ -258,7 +250,7 @@ export default function Materials() {
 
   const facultyOptions = Object.keys(LASU_DATA);
   const departmentOptions = getDepartmentOptions(context.school, context.faculty);
-  const levelOptions = getLevelOptions(context.school, context.department);
+  const levelOptions = getLevelOptions(context.school);
 
   const workspacePeriodId = periodControl?.workspace_period_id || periods[0]?.id || "";
   const workspacePeriod = periods.find((item) => item.id === workspacePeriodId) || null;
@@ -398,7 +390,7 @@ export default function Materials() {
         school: "LASUCOM",
         faculty: "College of Medicine",
         department: "",
-        level: "200L",
+        level: "100L",
       });
       return;
     }
@@ -420,12 +412,9 @@ export default function Materials() {
   }
 
   function handleContextDepartmentChange(value: string) {
-    const levels = getLevelOptions(context.school, value);
-
     setContext((prev) => ({
       ...prev,
       department: value,
-      level: levels[0] || prev.level,
     }));
   }
 

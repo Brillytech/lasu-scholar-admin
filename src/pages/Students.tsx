@@ -288,6 +288,13 @@ export default function Students() {
           style={selectColors}
           className="h-12 rounded-2xl border border-orange/10 bg-white/85 px-4 text-sm font-bold text-navy shadow-sm outline-none backdrop-blur-xl dark:border-white/10 dark:bg-white/10 dark:text-white"
         >
+          {/*
+            This filter is deliberately not from lib/levels: it has to match level
+            strings already sitting in the students table, including the legacy
+            "100 Level" / "200 Level" spellings from older signups. Filtering on a
+            value that is not in the data would silently hide those students.
+          */}
+
           <option value="" style={selectColors}>All Levels</option>
           <option value="100L" style={selectColors}>100L</option>
           <option value="100 Level" style={selectColors}>100 Level</option>

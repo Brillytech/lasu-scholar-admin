@@ -8,6 +8,7 @@ import {
   Send,
   Trash2,
 } from "lucide-react";
+import { ALL_LEVELS } from "../lib/levels";
 import { useAdminAuth } from "../context/AuthContext";
 import { useSelectColors } from "../hooks/useIsDarkMode";
 import { createAdminLog } from "../services/adminLogs";
@@ -141,7 +142,7 @@ const LASUCOM_DEPARTMENTS = [
   "Radiography and Radiation Science",
 ];
 
-const levelOptions = ["100L", "200L", "300L", "400L", "500L", "600L"];
+const levelOptions = ALL_LEVELS;
 
 const emptyForm = {
   title: "",

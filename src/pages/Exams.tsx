@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { getLevelOptions } from "../lib/levels";
 import SelectRaw from "../components/SelectRaw";
 import { useSelectColors } from "../hooks/useIsDarkMode";
 import {
@@ -174,16 +175,6 @@ function getDepartmentOptions(school: string, faculty: string) {
   return LASU_DATA[faculty] || [];
 }
 
-function getLevelOptions(school: string, department?: string) {
-  if (school !== "LASUCOM") return ["100L", "200L", "300L", "400L", "500L"];
-
-  const periodType = getAcademicPeriodType(department);
-
-  if (periodType === "block") return ["200L", "300L"];
-
-  return ["200L", "300L", "400L", "500L"];
-}
-
 export default function Exams() {
   const selectColors = useSelectColors();
 
@@ -209,7 +200,7 @@ export default function Exams() {
   const [visibleCount, setVisibleCount] = useState(50);
 
   const departmentOptions = getDepartmentOptions(context.school, context.faculty);
-  const levelOptions = getLevelOptions(context.school, context.department);
+  const levelOptions = getLevelOptions(context.school);
 
   const workspacePeriodId = periodControl?.workspace_period_id || periods[0]?.id || "";
   const workspacePeriod = periods.find((item) => item.id === workspacePeriodId) || null;
@@ -319,7 +310,7 @@ export default function Exams() {
         school: "LASUCOM",
         faculty: "College of Medicine",
         department: "",
-        level: "200L",
+        level: "100L",
       });
       return;
     }
@@ -341,12 +332,9 @@ export default function Exams() {
   }
 
   function handleContextDepartmentChange(value: string) {
-    const levels = getLevelOptions(context.school, value);
-
     setContext((prev) => ({
       ...prev,
       department: value,
-      level: levels[0] || prev.level,
     }));
   }
 

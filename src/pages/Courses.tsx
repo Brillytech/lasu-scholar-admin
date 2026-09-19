@@ -145,6 +145,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import { getLevelOptions } from "../lib/levels";
 import { useAdminAuth } from "../context/AuthContext";
 import { useSelectColors } from "../hooks/useIsDarkMode";
 import { createAdminLog } from "../services/adminLogs";
@@ -619,18 +620,6 @@ function getDepartmentOptions(school: string, faculty: string) {
   return LASU_DATA[faculty] || [];
 }
 
-function getLevelOptions(school: string, department?: string) {
-  void department;
-
-  if (school !== "LASUCOM") return ["100L", "200L", "300L", "400L", "500L"];
-
-  /*
-    LASUCOM students can have real 100L department courses.
-    100L stays semester-based; Medicine/Dentistry switch to blocks from 200L upward.
-  */
-  return ["100L", "200L", "300L", "400L", "500L", "600L"];
-}
-
 export default function Courses() {
   const { profile } = useAdminAuth();
   const isSuperAdmin = profile?.role === "super_admin";
@@ -664,10 +653,10 @@ export default function Courses() {
   const facultyOptions = Object.keys(LASU_DATA);
 
   const departmentOptions = getDepartmentOptions(context.school, context.faculty);
-  const levelOptions = getLevelOptions(context.school, context.department);
+  const levelOptions = getLevelOptions(context.school);
 
   const shareDepartmentOptions = getDepartmentOptions(shareForm.school, shareForm.faculty);
-  const shareLevelOptions = getLevelOptions(shareForm.school, shareForm.department);
+  const shareLevelOptions = getLevelOptions(shareForm.school);
 
   const workspacePeriodId = periodControl?.workspace_period_id || periods[0]?.id || "";
   const livePeriodId = periodControl?.live_period_id || periods[0]?.id || "";
@@ -845,12 +834,9 @@ export default function Courses() {
   }
 
   function handleContextDepartmentChange(value: string) {
-    const levels = getLevelOptions(context.school, value);
-
     setContext((prev) => ({
       ...prev,
       department: value,
-      level: levels[0] || prev.level,
     }));
   }
 
@@ -885,12 +871,9 @@ export default function Courses() {
   }
 
   function handleShareDepartmentChange(value: string) {
-    const levels = getLevelOptions(shareForm.school, value);
-
     setShareForm((prev) => ({
       ...prev,
       department: value,
-      level: levels[0] || prev.level,
       academic_period_id: "",
     }));
   }
