@@ -146,6 +146,7 @@ import {
   Zap,
 } from "lucide-react";
 import { getLevelOptions } from "../lib/levels";
+import { scrollPanelIntoView } from "../lib/scrollToPanel";
 import { useAdminAuth } from "../context/AuthContext";
 import { useSelectColors } from "../hooks/useIsDarkMode";
 import { createAdminLog } from "../services/adminLogs";
@@ -645,6 +646,7 @@ export default function Courses() {
 
   const [courseModalOpen, setCourseModalOpen] = useState(false);
   const [sharePanelOpen, setSharePanelOpen] = useState(false);
+  const sharePanelRef = useRef<HTMLDivElement | null>(null);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
 
   const [visibleCount, setVisibleCount] = useState(10);
@@ -665,6 +667,8 @@ export default function Courses() {
 
   const periodType = getAcademicPeriodType(context.department, context.level);
 
+  const selectedCourseId = selectedCourse?.id;
+
   useEffect(() => {
     loadAcademicWorkspace();
   }, [context.school, context.faculty, context.department, context.level]);
@@ -678,6 +682,23 @@ export default function Courses() {
   useEffect(() => {
     loadSharePeriods();
   }, [shareForm.school, shareForm.faculty, shareForm.department, shareForm.level]);
+
+  /*
+    On narrow screens the share panel is stacked below the whole course
+    list, so opening it with no scroll looked like the button did nothing.
+    Re-runs when a different course is picked while the panel is open.
+  */
+  useEffect(() => {
+    if (!sharePanelOpen || !selectedCourseId) return;
+
+    // The panel flips from `hidden` to `block` in this same render, so wait
+    // a frame for layout before measuring where it landed.
+    const frame = requestAnimationFrame(() => {
+      scrollPanelIntoView(sharePanelRef.current);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [sharePanelOpen, selectedCourseId]);
 
   async function loadAcademicWorkspace() {
     const faculty = getContextFaculty(context);
@@ -1572,6 +1593,7 @@ export default function Courses() {
 
         <SharePanel
           isOpen={sharePanelOpen}
+          panelRef={sharePanelRef}
           selectedCourse={selectedCourse}
           shares={shares}
           shareForm={shareForm}
@@ -1755,6 +1777,7 @@ function PeriodSwitcher({
 
 function SharePanel({
   isOpen,
+  panelRef,
   selectedCourse,
   shares,
   shareForm,
@@ -1774,6 +1797,7 @@ function SharePanel({
 }: any) {
   return (
     <div
+      ref={panelRef}
       className={`rounded-[28px] border border-orange/10 bg-white/85 p-5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/10 ${
         isOpen ? "block" : "hidden xl:block"
       }`}
