@@ -10,6 +10,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import { LASUCOM_DEPARTMENTS, SCHOOLS } from "../lib/academics";
 import { createAdminLog } from "../services/adminLogs";
 import { useAdminAuth } from "../context/AuthContext";
 import { useSelectColors } from "../hooks/useIsDarkMode";
@@ -18,18 +19,6 @@ import {
   getStudents,
   promoteLasucom100LevelDepartment,
 } from "../services/students";
-
-const LASUCOM_DEPARTMENTS = [
-  "Dentistry",
-  "Medical Laboratory Science",
-  "Medicine and Surgery",
-  "Nursing",
-  "Pharmacy",
-  "Pharmacology",
-  "Physiology",
-  "Physiotherapy",
-  "Radiography and Radiation Science",
-];
 
 function isLasucom100L(student: Student) {
   return (
@@ -275,8 +264,11 @@ export default function Students() {
           className="h-12 rounded-2xl border border-orange/10 bg-white/85 px-4 text-sm font-bold text-navy shadow-sm outline-none backdrop-blur-xl dark:border-white/10 dark:bg-white/10 dark:text-white"
         >
           <option value="" style={selectColors}>All Schools</option>
-          <option value="LASU" style={selectColors}>LASU</option>
-          <option value="LASUCOM" style={selectColors}>LASUCOM</option>
+          {SCHOOLS.map((item) => (
+            <option key={item} value={item} style={selectColors}>
+              {item}
+            </option>
+          ))}
         </select>
 
         <select

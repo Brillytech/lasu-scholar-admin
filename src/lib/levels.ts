@@ -25,3 +25,26 @@ export const ALL_LEVELS = LASUCOM_LEVELS;
 export function getLevelOptions(school: string) {
   return school === "LASUCOM" ? LASUCOM_LEVELS : LASU_LEVELS;
 }
+
+/*
+  Older signups stored levels as "100 Level" rather than "100L". Courses,
+  shares and period controls are all matched on the level string by exact
+  equality, so a legacy value matches nothing — the student opens the app
+  and sees no courses at all. Normalise on read for display and on write
+  so the stored value is repaired.
+
+  Returns the input trimmed if it matches no known level, so an unexpected
+  value is passed through visibly rather than silently blanked.
+*/
+export function normalizeLevel(value?: string | null) {
+  const clean = String(value || "").trim();
+  if (!clean) return "";
+
+  const digits = clean.match(/^(\d{3})\s*(?:L|Level)?$/i);
+  if (digits) {
+    const canonical = `${digits[1]}L`;
+    return ALL_LEVELS.includes(canonical) ? canonical : clean;
+  }
+
+  return clean;
+}

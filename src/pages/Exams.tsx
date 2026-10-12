@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { getLevelOptions } from "../lib/levels";
+import { getDepartmentOptions, getFacultyOptions, LASUCOM_FACULTY, SCHOOLS } from "../lib/academics";
 import SelectRaw from "../components/SelectRaw";
 import { useSelectColors } from "../hooks/useIsDarkMode";
 import {
@@ -26,134 +27,6 @@ import {
 import type { ExamAnswer, ExamAttempt } from "../services/exams";
 import { getExamAnswers, getExamAttempts } from "../services/exams";
 
-const LASU_DATA: Record<string, string[]> = {
-  Arts: [
-    "Arabic",
-    "Christian Religious Studies",
-    "English",
-    "French",
-    "History and International Studies",
-    "Islamic Studies",
-    "Linguistics",
-    "Music",
-    "Peace Studies",
-    "Philosophy",
-    "Portuguese / English",
-    "Theatre Arts",
-    "Yoruba",
-  ],
-  "Communication and Media Studies": ["Mass Communication"],
-  Education: [
-    "Arabic Education",
-    "Biology Education",
-    "Business Education",
-    "Chemistry Education",
-    "Christian Religious Studies Education",
-    "Computer Science Education",
-    "Early Childhood Education",
-    "Economics Education",
-    "Educational Management",
-    "English Education",
-    "French Education",
-    "Geography Education",
-    "Guidance and Counselling",
-    "Health Education",
-    "History Education",
-    "Islamic Studies Education",
-    "Mathematics Education",
-    "Music Education",
-    "Physical and Health Education",
-    "Physics Education",
-    "Political Science Education",
-    "Social Studies and Civic Education",
-    "Special Education",
-    "Technology and Vocational Education",
-    "Yoruba Education",
-  ],
-  Engineering: [
-    "Aeronautic and Astronautic Engineering",
-    "Chemical Engineering",
-    "Civil Engineering",
-    "Electronics and Computer Engineering",
-    "Industrial Engineering",
-    "Mechanical Engineering",
-  ],
-  "Environmental Sciences": [
-    "Architecture",
-    "Building",
-    "Estate Management",
-    "Environmental Management",
-    "Fine Arts",
-    "Industrial Design",
-    "Survey and Geo-Informatics",
-    "Quantity Surveying",
-    "Urban and Regional Planning",
-  ],
-  Law: ["Common/Civil Law", "Common/Islamic Law"],
-  "Management Sciences": [
-    "Accounting",
-    "Banking and Finance",
-    "Business Administration",
-    "Industrial Relations and Human Resource Management",
-    "Insurance",
-    "Local Government Development and Administration",
-    "Management Technology",
-    "Marketing",
-    "Public Administration",
-    "Taxation",
-  ],
-  Science: [
-    "Biochemistry",
-    "Botany",
-    "Chemistry",
-    "Fisheries and Aquatic Biology",
-    "Mathematics",
-    "Microbiology",
-    "Physics",
-    "Science Laboratory Technology",
-    "Zoology",
-  ],
-  "Social Sciences": [
-    "Economics",
-    "Geography and Planning",
-    "Political Science",
-    "Sociology",
-    "Psychology",
-  ],
-  "Computing and Information Technology": [
-    "Computer Science",
-    "Cyber Security",
-    "Data Science",
-    "Information and Communication Technology",
-    "Software Engineering",
-  ],
-  "School of Agriculture": [
-    "Agricultural Economics",
-    "Agricultural Extension and Rural Development",
-    "Animal Science",
-    "Crop Production",
-  ],
-  "School of Library, Archival and Information Science": [
-    "Library and Information Science",
-  ],
-  "School of Transport and Logistics": [
-    "Transport Management and Operations",
-    "Logistics and Supply Chain Management",
-  ],
-};
-
-const LASUCOM_DEPARTMENTS = [
-  "Dentistry",
-  "Medical Laboratory Science",
-  "Medicine and Surgery",
-  "Nursing",
-  "Pharmacy",
-  "Pharmacology",
-  "Physiology",
-  "Physiotherapy",
-  "Radiography and Radiation Science",
-];
-
 const emptyContext = {
   school: "LASU",
   faculty: "",
@@ -166,13 +39,7 @@ function clean(value?: string | null) {
 }
 
 function getContextFaculty(context: typeof emptyContext) {
-  return context.school === "LASUCOM" ? "College of Medicine" : clean(context.faculty);
-}
-
-function getDepartmentOptions(school: string, faculty: string) {
-  if (school === "LASUCOM") return LASUCOM_DEPARTMENTS;
-  if (!faculty) return [];
-  return LASU_DATA[faculty] || [];
+  return context.school === "LASUCOM" ? LASUCOM_FACULTY : clean(context.faculty);
 }
 
 export default function Exams() {
@@ -308,7 +175,7 @@ export default function Exams() {
     if (value === "LASUCOM") {
       setContext({
         school: "LASUCOM",
-        faculty: "College of Medicine",
+        faculty: LASUCOM_FACULTY,
         department: "",
         level: "100L",
       });
@@ -497,7 +364,7 @@ export default function Exams() {
             label="School"
             value={context.school}
             onChange={handleContextSchoolChange}
-            options={["LASU", "LASUCOM"]}
+            options={SCHOOLS}
           />
 
           {context.school === "LASU" && (
@@ -505,7 +372,7 @@ export default function Exams() {
               label="Faculty"
               value={context.faculty}
               onChange={handleContextFacultyChange}
-              options={["", ...Object.keys(LASU_DATA)]}
+              options={["", ...getFacultyOptions("LASU")]}
             />
           )}
 
