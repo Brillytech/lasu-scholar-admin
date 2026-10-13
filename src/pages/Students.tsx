@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
+  Edit3,
   Eye,
   GraduationCap,
   Search,
@@ -11,6 +12,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { LASUCOM_DEPARTMENTS, SCHOOLS } from "../lib/academics";
+import EditAcademicModal from "../components/EditAcademicModal";
 import { createAdminLog } from "../services/adminLogs";
 import { useAdminAuth } from "../context/AuthContext";
 import { useSelectColors } from "../hooks/useIsDarkMode";
@@ -39,6 +41,7 @@ export default function Students() {
   const [loading, setLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(50);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
 
   const [promotionDepartment, setPromotionDepartment] = useState("");
   const [promoting, setPromoting] = useState(false);
@@ -56,6 +59,25 @@ export default function Students() {
       alert(error.message || "Could not load students.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  /*
+    Called once the edit has actually landed. The open profile modal behind
+    the editor is showing the old values, so it is re-pointed at the fresh
+    row rather than left stale.
+  */
+  async function refreshEditedStudent() {
+    try {
+      const data = await getStudents();
+      setStudents(data);
+      setSelectedStudent((prev) =>
+        prev ? data.find((item) => item.id === prev.id) || null : null
+      );
+    } catch (error) {
+      alert(
+        error instanceof Error ? error.message : "Could not reload students."
+      );
     }
   }
 
@@ -497,9 +519,12 @@ export default function Students() {
                   Student Profile
                 </p>
                 <h3 className="mt-2 text-2xl font-black text-navy dark:text-white">
-                  {selectedStudent.username || "No username"}
+                  {selectedStudent.full_name ||
+                    selectedStudent.username ||
+                    "No name"}
                 </h3>
-                <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-300">
+                <p className="mt-1 break-words text-sm font-semibold text-slate-500 dark:text-slate-300">
+                  {selectedStudent.username || "No username"} ·{" "}
                   {selectedStudent.email || "No email"}
                 </p>
               </div>
@@ -538,11 +563,30 @@ export default function Students() {
                 Admin Actions
               </p>
               <p className="mt-2 text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">
-                Student promotion is handled by department from the main Students page.
+                Correct academic details a student locked in by mistake. Logged to
+                admin logs. Student promotion is handled by department from the
+                main Students page.
               </p>
+
+              <button
+                onClick={() => setEditingStudent(selectedStudent)}
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange to-amber-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.02] sm:w-auto"
+              >
+                <Edit3 size={16} />
+                Edit academic details
+              </button>
             </div>
           </div>
         </div>
+      )}
+
+      {editingStudent && (
+        <EditAcademicModal
+          student={editingStudent}
+          adminId={profile?.id}
+          onClose={() => setEditingStudent(null)}
+          onSaved={refreshEditedStudent}
+        />
       )}
     </div>
   );
